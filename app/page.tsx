@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 
 import { HomeShell } from "@/components/home/HomeShell";
+import { VerifySpotifyButton } from "@/components/VerifySpotifyButton";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -41,9 +42,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <section className="card stack">
           <h2>Welcome</h2>
           <p>Sign in with Spotify to start your private shared music journal.</p>
-          <a className="button-link" href="/api/auth/signin/spotify">
-            Verify Spotify Sign-In
-          </a>
+          <VerifySpotifyButton />
           {spotifyCallbackUrl ? (
             <p className="muted">
               Spotify callback URL: <code>{spotifyCallbackUrl}</code>
