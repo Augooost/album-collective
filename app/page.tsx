@@ -13,6 +13,10 @@ type HomePageProps = {
 export default async function HomePage({ searchParams }: HomePageProps) {
   const session = await getServerSession(authOptions);
   const resolvedSearchParams = searchParams ? await searchParams : {};
+  const authBaseUrl = process.env.NEXTAUTH_URL ?? "";
+  const spotifyCallbackUrl = authBaseUrl
+    ? `${authBaseUrl}/api/auth/callback/spotify`
+    : null;
   const authError =
     typeof resolvedSearchParams.error === "string"
       ? resolvedSearchParams.error
@@ -37,6 +41,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <section className="card stack">
           <h2>Welcome</h2>
           <p>Sign in with Spotify to start your private shared music journal.</p>
+          <a className="button-link" href="/api/auth/signin/spotify">
+            Verify Spotify Sign-In
+          </a>
+          {spotifyCallbackUrl ? (
+            <p className="muted">
+              Spotify callback URL: <code>{spotifyCallbackUrl}</code>
+            </p>
+          ) : null}
         </section>
       </section>
     );
