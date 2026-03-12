@@ -1,0 +1,9 @@
+node_modules
+.next
+.env
+.env.local
+.env.*.local
+.env*.rtf
+*.rtf
+prisma/dev.db
+prisma/dev.db-journal
