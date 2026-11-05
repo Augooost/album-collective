@@ -159,10 +159,11 @@ Auth/session models are the standard NextAuth Prisma models (`User`, `Account`, 
 
 ## Routes
 
-- `/` Home: sign-in state, add-link form, recent entries
+- `/` Home: recent Spotify albums, friends’ listening, and shared links
 - `/catalog` Catalog: all saved entries
 - `/stats` Stats: entry counts and top artists/owners
 - `/api/entries` GET/POST entries
+- `/api/listening` refresh recent albums, change sharing, or clear imported history
 - `/api/auth/[...nextauth]` NextAuth handlers
 
 ## Deploy to Vercel
@@ -179,6 +180,8 @@ npx prisma migrate deploy
 
 ## Notes
 
+- **Connect Spotify history** on Home to grant listening access. Home groups the latest 50 track plays by release and shows albums played within the last 14 days. It refreshes the snapshot when you open Home.
+- Listening starts private. **Listening settings** lets you share recent albums with signed-in members, turn sharing off, or clear your imported history. Reviews and shared links are posted separately.
 - This MVP stores entries per authenticated user.
 - Duplicate links are upserted per user (`userId + spotifyType + spotifyId`).
 - If Spotify token expires, refresh is handled automatically using stored refresh token.

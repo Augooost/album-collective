@@ -80,7 +80,7 @@ export async function POST(request: Request) {
         spotifyUrl: metadata.spotifyUrl || parsed.url,
         sourceUrl: parsed.url,
         notes: parsed.notes || null,
-        rating: parsed.rating ?? null
+        rating: parsed.rating
       }
     });
 

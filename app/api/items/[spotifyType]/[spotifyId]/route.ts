@@ -3,10 +3,11 @@ import { getServerSession } from "next-auth";
 import { z } from "zod";
 
 import { authOptions } from "@/lib/auth";
+import { visibleListening } from "@/lib/listening";
 import { prisma } from "@/lib/prisma";
 
 const updateSchema = z.object({
-  rating: z.number().min(0).max(5),
+  rating: z.number().min(0).max(5).nullable(),
   notes: z.string().max(300).optional().default("")
 });
 
@@ -18,6 +19,14 @@ function normalizeSpotifyType(value: string): SpotifyType {
   }
 
   throw new Error("Invalid Spotify type.");
+}
+
+function findRecentAlbum(userId: string, spotifyId: string) {
+  return prisma.recentAlbum.findFirst({
+    where: { ...visibleListening(userId), spotifyId },
+    orderBy: { playedAt: "desc" },
+    include: { user: { select: { name: true } } }
+  });
 }
 
 export async function GET(
@@ -48,22 +57,22 @@ export async function GET(
           select: {
             id: true,
             name: true,
-            email: true,
             image: true
           }
         }
       }
     });
 
-    if (entries.length === 0) {
-      return Response.json({ error: "Item not found." }, { status: 404 });
-    }
-
     const item = entries[0];
+    const recent = !item && spotifyType === "ALBUM"
+      ? await findRecentAlbum(userId, resolvedParams.spotifyId)
+      : null;
+    if (!item && !recent) return Response.json({ error: "Item not found." }, { status: 404 });
+
     const reviews = entries
-      .filter((entry) => entry.rating !== null)
+      .filter((entry) => entry.rating !== null || entry.notes)
       .sort((a, b) => {
-        const ratingDiff = (b.rating ?? 0) - (a.rating ?? 0);
+        const ratingDiff = (b.rating ?? -1) - (a.rating ?? -1);
         if (ratingDiff !== 0) {
           return ratingDiff;
         }
@@ -74,7 +83,6 @@ export async function GET(
         id: entry.id,
         userId: entry.userId,
         name: entry.user.name,
-        email: entry.user.email,
         image: entry.user.image,
         rating: entry.rating,
         notes: entry.notes,
@@ -91,7 +99,7 @@ export async function GET(
     const currentUserReview = entries.find((entry) => entry.userId === userId) ?? null;
 
     return Response.json({
-      item: {
+      item: item ? {
         id: item.id,
         spotifyType: item.spotifyType,
         spotifyId: item.spotifyId,
@@ -101,12 +109,23 @@ export async function GET(
         imageUrl: item.imageUrl,
         releaseDate: item.releaseDate,
         sharedByName: item.user.name,
-        sharedByEmail: item.user.email,
         sharedAt: item.addedAt,
         spotifyUrl: item.spotifyUrl
+      } : {
+        spotifyId: resolvedParams.spotifyId,
+        entryKind: recent?.entryKind,
+        title: recent?.title,
+        artistName: recent?.artistName,
+        imageUrl: recent?.imageUrl,
+        releaseDate: recent?.releaseDate,
+        sharedByName: recent?.user.name,
+        sharedAt: recent?.playedAt,
+        spotifyType,
+        spotifyUrl: `https://open.spotify.com/album/${resolvedParams.spotifyId}`
       },
       overallRating,
       reviews,
+      canReview: spotifyType === "ALBUM" || currentUserReview !== null,
       currentUserReview: currentUserReview
         ? {
             rating: currentUserReview.rating,
@@ -138,27 +157,38 @@ export async function PATCH(
     const body = await request.json();
     const parsed = updateSchema.parse(body);
 
-    const review = await prisma.journalEntry.findFirst({
-      where: {
-        userId,
-        spotifyType,
-        spotifyId: resolvedParams.spotifyId
-      }
-    });
-
-    if (!review) {
-      return Response.json(
-        { error: "You do not have a review for this item yet." },
-        { status: 404 }
-      );
+    const spotifyId = resolvedParams.spotifyId;
+    const where = { userId_spotifyType_spotifyId: { userId, spotifyType, spotifyId } };
+    const data = { rating: parsed.rating, notes: parsed.notes.trim() || null };
+    const existing = await prisma.journalEntry.updateMany({ where: where.userId_spotifyType_spotifyId, data });
+    if (existing.count) return Response.json({ review: data });
+    if (spotifyType !== "ALBUM") {
+      return Response.json({ error: "You do not have a review for this item yet." }, { status: 404 });
     }
+    if (data.rating === null && !data.notes) {
+      return Response.json({ error: "Add a rating or note to share a review." }, { status: 400 });
+    }
+    const source = await prisma.journalEntry.findFirst({ where: { spotifyType, spotifyId } })
+      ?? await findRecentAlbum(userId, spotifyId);
+    if (!source) return Response.json({ error: "Album not found." }, { status: 404 });
 
-    const updated = await prisma.journalEntry.update({
-      where: { id: review.id },
-      data: {
-        rating: parsed.rating,
-        notes: parsed.notes || null
-      }
+    const spotifyUrl = `https://open.spotify.com/album/${spotifyId}`;
+    const updated = await prisma.journalEntry.upsert({
+      where,
+      create: {
+        ...where.userId_spotifyType_spotifyId,
+        ...data,
+        entryKind: source.entryKind,
+        title: source.title,
+        artistName: source.artistName,
+        albumName: source.title,
+        subtitle: source.artistName,
+        imageUrl: source.imageUrl,
+        releaseDate: source.releaseDate,
+        sourceUrl: spotifyUrl,
+        spotifyUrl
+      },
+      update: data
     });
 
     return Response.json({

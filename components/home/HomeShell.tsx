@@ -1,274 +1,327 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 
-import { FilterPill } from "@/components/catalog/FilterPill";
 import { SidebarNavButton } from "@/components/catalog/SidebarNavButton";
 import { TopSearchBar } from "@/components/catalog/TopSearchBar";
 import { EntryDetailSheet } from "@/components/item/EntryDetailSheet";
+import { spotifyListeningScopes } from "@/lib/spotify-scopes";
 
-type FeedEntry = {
-  id: string;
+type FeedItem = {
   spotifyType: "TRACK" | "ALBUM" | "PLAYLIST";
   spotifyId: string;
   entryKind: "TRACK" | "ALBUM" | "EP" | "PLAYLIST";
   title: string;
-  subtitle: string | null;
   artistName: string | null;
   releaseDate: string | null;
   imageUrl: string | null;
   spotifyUrl: string;
-  notes: string | null;
-  addedAt: string | Date;
-  user: {
-    name: string | null;
-    email: string | null;
-  } | null;
-  sharedByName?: string | null;
-  sharedByEmail?: string | null;
-  sharedAt?: string | Date;
+  activityAt: string;
+  isMine: boolean;
+  myRating: number | null;
+  user: { name: string | null; image: string | null };
 };
 
 type Props = {
-  entries: FeedEntry[];
+  recent: FeedItem[];
+  shared: FeedItem[];
+  listeningEnabled: boolean;
+  shareListeningHistory: boolean;
+  lastSyncedAt: string | null;
   userImage: string | null;
 };
 
-const PAGE_SIZE = 12;
+const filters = [
+  { id: "recent", label: "Recent listening", heading: "Recently played", description: "Albums and releases you and your friends have been playing on Spotify." },
+  { id: "mine", label: "Just me", heading: "My recent albums", description: "A look back at what you’ve been listening to lately." },
+  { id: "friends", label: "Friends", heading: "Friends’ listening", description: "Discover albums from friends who share their recent listening." },
+  { id: "shared", label: "Shared links", heading: "Shared links & reviews", description: "Music and reviews posted by members of the collective." }
+] as const;
+type View = (typeof filters)[number]["id"];
+const PAGE_SIZE = 18;
+const dateFormat = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" });
 
-function relativeTime(dateValue: string | Date): string {
-  const now = Date.now();
-  const then = +new Date(dateValue);
-  const diffHours = Math.max(1, Math.floor((now - then) / 3_600_000));
-
-  if (diffHours < 24) {
-    return `${diffHours}h ago`;
-  }
-
-  const days = Math.floor(diffHours / 24);
-  if (days < 7) {
-    return `${days}d ago`;
-  }
-
-  return new Date(dateValue).toLocaleDateString();
+function listenerName(item: FeedItem) {
+  return item.isMine ? "You" : item.user.name || "A friend";
 }
 
-function yearFromDate(releaseDate: string | null, addedAt: string | Date): string {
-  if (releaseDate && releaseDate.length >= 4) {
-    return releaseDate.slice(0, 4);
+async function request(path: string, options: RequestInit) {
+  const response = await fetch(path, options);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? "Something went wrong. Please try again.");
   }
-  return new Date(addedAt).getFullYear().toString();
+  return response.json();
 }
 
-export function HomeShell({ entries, userImage }: Props) {
+export function HomeShell({ recent, shared, listeningEnabled, shareListeningHistory, lastSyncedAt, userImage }: Props) {
   const router = useRouter();
+  const [view, setView] = useState<View>("recent");
   const [search, setSearch] = useState("");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [selected, setSelected] = useState<FeedItem | null>(null);
+  const [showDropLink, setShowDropLink] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [shareNote, setShareNote] = useState("");
-  const [shareRating, setShareRating] = useState(0);
-  const [saving, setSaving] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedEntry, setSelectedEntry] = useState<FeedEntry | null>(null);
+  const [posting, setPosting] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [feedError, setFeedError] = useState<string | null>(null);
+  const [postError, setPostError] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) {
-      return entries;
+  const refreshListening = useCallback(async () => {
+    setSyncing(true);
+    setFeedError(null);
+    try {
+      const result = await request("/api/listening", { method: "POST" }) as { synced: boolean };
+      if (result.synced) router.refresh();
+    } catch (error) {
+      setFeedError(error instanceof Error ? error.message : "Couldn’t refresh your listening.");
+    } finally {
+      setSyncing(false);
     }
+  }, [router]);
 
-    return entries.filter((entry) =>
-      [entry.title, entry.artistName ?? entry.subtitle ?? "", entry.user?.name ?? ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(q)
-    );
-  }, [entries, search]);
+  useEffect(() => {
+    if (listeningEnabled) void refreshListening();
+  }, [listeningEnabled, refreshListening]);
 
-  const visible = filtered.slice(0, visibleCount);
-  const hasMore = filtered.length > visible.length;
+  async function connectHistory() {
+    setUpdating(true);
+    setFeedError(null);
+    try {
+      await signIn("spotify", { callbackUrl: "/" }, { scope: spotifyListeningScopes });
+    } catch {
+      setFeedError("Couldn’t connect to Spotify. Please try again.");
+      setUpdating(false);
+    }
+  }
+
+  async function updateHistory(action: "share" | "disconnect") {
+    setUpdating(true);
+    setFeedError(null);
+    try {
+      await request("/api/listening", action === "disconnect" ? { method: "DELETE" } : {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ share: !shareListeningHistory })
+      });
+      setSelected(null);
+      router.refresh();
+    } catch (error) {
+      setFeedError(error instanceof Error ? error.message : "Couldn’t update your listening settings.");
+    } finally {
+      setUpdating(false);
+    }
+  }
 
   async function submitShare(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSaving(true);
-    setError(null);
-
+    setPosting(true);
+    setPostError(null);
     try {
-      const response = await fetch("/api/entries", {
+      await request("/api/entries", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ url: shareUrl, notes: shareNote, rating: shareRating })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: shareUrl, notes: shareNote })
       });
-
-      const json = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        throw new Error(json.error ?? "Failed to add link.");
-      }
-
       setShareUrl("");
       setShareNote("");
-      setShareRating(0);
+      setShowDropLink(false);
+      setSearch("");
+      changeView("shared");
       router.refresh();
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Failed to add link.");
+    } catch (error) {
+      setPostError(error instanceof Error ? error.message : "Couldn’t share this link.");
     } finally {
-      setSaving(false);
+      setPosting(false);
     }
   }
 
+  function changeView(next: View) {
+    setView(next);
+    setVisibleCount(PAGE_SIZE);
+  }
+
+  const activeView = filters.find((filter) => filter.id === view) ?? filters[0];
+  const query = search.trim().toLowerCase();
+  const showSharedPreview = view === "recent" && !query && recent.length === 0;
+  const showingShared = view === "shared" || showSharedPreview;
+  const feed = showSharedPreview ? shared.filter((item) => item.spotifyType === "ALBUM") : showingShared ? shared : recent;
+  const groups = new Map<string, FeedItem[]>();
+  for (const item of feed) {
+    if ((view === "mine" && !item.isMine) || (view === "friends" && item.isMine)) continue;
+    const key = `${item.spotifyType}:${item.spotifyId}`;
+    const group = groups.get(key) ?? [];
+    group.push(item);
+    groups.set(key, group);
+  }
+  const cards = [...groups.values()].filter((group) =>
+    group.some((item) => [item.title, item.artistName, listenerName(item)].join(" ").toLowerCase().includes(query))
+  );
+  const empty = query ? "No albums match your search." : view === "friends"
+    ? "Albums will appear here when friends join and share their listening."
+    : view === "shared" ? "Share a Spotify link to start the collection."
+    : !listeningEnabled ? "Connect your Spotify history to bring your recent albums here."
+    : syncing ? "Finding your recent albums…" : "No recent albums yet. Play something on Spotify and check back.";
+
   return (
-    <div className="catalog-page">
-      <aside className="catalog-sidebar">
+    <div className="catalog-page home-page">
+      <header className="catalog-top-row home-top">
         <div className="catalog-brand">
           <img src="/design-reference/logo/logo.svg" alt="Album Collective" />
         </div>
-        <div className="catalog-side-main">
-          <SidebarNavButton
-            href="/"
-            label="Home"
-            iconSrc="/design-reference/icons/home.svg"
-            active
-          />
-          <SidebarNavButton
-            href="/catalog"
-            label="Catalog"
-            iconSrc="/design-reference/icons/catalog.svg"
-          />
-          <SidebarNavButton
-            href="/stats"
-            label="Stats"
-            iconSrc="/design-reference/icons/stats.svg"
-          />
+        <TopSearchBar value={search} onChange={(value) => { setSearch(value); setVisibleCount(PAGE_SIZE); }}
+          onPaste={(event) => {
+            const value = event.clipboardData.getData("text").trim();
+            if (!/^https:\/\/open\.spotify\.com\/(album|track|playlist)\//i.test(value)) return;
+            event.preventDefault();
+            setShareUrl(value);
+            setShowDropLink(true);
+          }} />
+        <div className="catalog-avatar">
+          {userImage ? <img src={userImage} alt="Your profile" /> : <span>You</span>}
         </div>
+      </header>
+
+      <aside className="catalog-sidebar home-sidebar">
+        <nav className="catalog-side-main" aria-label="Main">
+          <SidebarNavButton href="/" label="Home" iconSrc="/design-reference/icons/home.svg" active />
+          <SidebarNavButton href="/catalog" label="Catalog" iconSrc="/design-reference/icons/catalog.svg" />
+          <SidebarNavButton href="/stats" label="Stats" iconSrc="/design-reference/icons/stats.svg" />
+        </nav>
         <div className="catalog-side-bottom">
-          <button className="catalog-side-btn" type="button">
-            <span className="catalog-side-icon catalog-theme-dot" aria-hidden="true" />
-            <span>Theme</span>
-          </button>
-          <button className="catalog-side-btn" type="button">
-            <img
-              src="/design-reference/icons/paste.svg"
-              alt=""
-              aria-hidden="true"
-              className="catalog-side-icon"
-            />
+          <button className="catalog-side-btn" type="button" aria-expanded={showDropLink}
+            aria-controls="home-drop-link" onClick={() => setShowDropLink((open) => !open)}>
+            <img src="/design-reference/icons/paste.svg" alt="" className="catalog-side-icon" />
             <span>Drop Link</span>
           </button>
         </div>
       </aside>
 
-      <section className="catalog-main">
-        <header className="catalog-top-row">
-          <div className="catalog-top-left-dot" />
-          <TopSearchBar value={search} onChange={setSearch} />
-          <div className="catalog-avatar">
-            {userImage ? <img src={userImage} alt="Profile" /> : <span>U</span>}
-          </div>
-        </header>
-
-        <section className="catalog-filter-row">
-          <FilterPill>
-            <span className="home-chip-label">Recent Activity</span>
-          </FilterPill>
-          <FilterPill>
-            <span className="home-chip-label">Shared Albums</span>
-          </FilterPill>
-          <FilterPill>
-            <span className="home-chip-label">{entries.length} Total Items</span>
-          </FilterPill>
-        </section>
-
-        <section className="catalog-content stack">
-          <h2>Recent Shares</h2>
-
-          <form className="home-share-form" onSubmit={submitShare}>
-            <input
-              type="url"
-              placeholder="Paste Spotify album/EP/track URL"
-              value={shareUrl}
-              onChange={(event) => setShareUrl(event.target.value)}
-              required
-            />
-            <input
-              type="text"
-              placeholder="Optional note"
-              value={shareNote}
-              onChange={(event) => setShareNote(event.target.value)}
-              maxLength={300}
-            />
-            <div className="home-rating-group">
-              <label htmlFor="share-rating">Rating</label>
-              <input
-                id="share-rating"
-                type="number"
-                min={0}
-                max={5}
-                step={0.25}
-                value={shareRating}
-                onChange={(event) => setShareRating(Number(event.target.value))}
-              />
-              <span>{shareRating.toFixed(2)}</span>
-            </div>
-            <button type="submit" disabled={saving}>
-              {saving ? "Adding..." : "Add Link"}
-            </button>
-          </form>
-
-          {error ? <p className="error">{error}</p> : null}
-
-          <div className="catalog-grid home-feed-grid" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
-            {visible.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                className="catalog-card-button"
-                onClick={() =>
-                  setSelectedEntry({
-                    ...entry,
-                    sharedByName: entry.user?.name ?? null,
-                    sharedByEmail: entry.user?.email ?? null,
-                    sharedAt: entry.addedAt
-                  })
-                }
-              >
-                <article className="catalog-album-card home-feed-card">
-                  <div className="catalog-cover-wrap">
-                    {entry.imageUrl ? (
-                      <img src={entry.imageUrl} alt={entry.title} className="catalog-cover" />
-                    ) : null}
-                  </div>
-                  <div className="catalog-album-meta">
-                    <p className="catalog-album-title">{entry.title}</p>
-                    <div className="catalog-album-sub">
-                      <p>{entry.artistName ?? entry.subtitle ?? "Unknown Artist"}</p>
-                      <span>{yearFromDate(entry.releaseDate, entry.addedAt)}</span>
-                    </div>
-                    {entry.notes ? <p className="home-note">“{entry.notes}”</p> : null}
-                    <p className="home-meta-line">
-                      {entry.user?.name ?? entry.user?.email ?? "Anonymous"} • {relativeTime(entry.addedAt)}
-                    </p>
-                  </div>
-                </article>
+      <section className="catalog-main home-main">
+        <div className="catalog-filter-row home-toolbar">
+          <div className="home-filters" aria-label="Listening feed">
+            {filters.map((filter) => (
+              <button key={filter.id} className="catalog-filter-pill home-filter" type="button"
+                aria-pressed={view === filter.id} onClick={() => changeView(filter.id)}>
+                {filter.label}
               </button>
             ))}
           </div>
+          <details className="home-settings">
+            <summary className="catalog-filter-pill home-filter">Listening settings</summary>
+            <div className="home-settings-panel stack-sm">
+              <p><strong>Spotify listening history</strong></p>
+              <p className="muted">Album Collective refreshes your recent albums when you open Home and shows up to 14 days of listening.</p>
+              {listeningEnabled ? (
+                <>
+                  <button type="button" onClick={() => updateHistory("share")} disabled={updating}>
+                    {shareListeningHistory ? "Stop sharing my listening" : "Share my recent albums"}
+                  </button>
+                  <p className="muted">{shareListeningHistory
+                    ? "Members can see your recent albums. You can turn this off anytime."
+                    : "Only you can see your listening. Turning on sharing makes recent albums visible to members."}</p>
+                  <button type="button" className="home-text-button" onClick={() => updateHistory("disconnect")} disabled={updating}>
+                    Stop importing and clear history
+                  </button>
+                  <button type="button" className="home-text-button" onClick={connectHistory} disabled={updating}>
+                    Reconnect Spotify
+                  </button>
+                  <a className="muted" href="https://www.spotify.com/account/apps/" target="_blank" rel="noreferrer">
+                    Manage Spotify app access
+                  </a>
+                </>
+              ) : <button type="button" onClick={connectHistory} disabled={updating}>Connect Spotify history</button>}
+            </div>
+          </details>
+          {listeningEnabled && <button className="catalog-filter-pill home-filter" type="button"
+            disabled={syncing} onClick={refreshListening} title={lastSyncedAt ? `Last updated ${dateFormat.format(new Date(lastSyncedAt))}` : undefined}>
+            {syncing ? "Refreshing…" : "Refresh"}
+          </button>}
+        </div>
 
-          <div className="catalog-load-wrap">
-            {hasMore ? (
-              <button className="catalog-load-more" type="button" onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}>
-                Load More
-              </button>
-            ) : null}
+        {showDropLink && <section className="catalog-content stack-sm" id="home-drop-link">
+          <h3>Share a Spotify link</h3>
+          <form className="home-share-form" onSubmit={submitShare}>
+            <input type="url" placeholder="Paste a Spotify link" aria-label="Spotify link" autoFocus required
+              value={shareUrl} onChange={(event) => setShareUrl(event.target.value)} />
+            <input type="text" placeholder="Optional note" aria-label="Note" maxLength={300}
+              value={shareNote} onChange={(event) => setShareNote(event.target.value)} />
+            <button type="submit" disabled={posting}>{posting ? "Sharing…" : "Share link"}</button>
+          </form>
+          {postError && <p className="error" role="alert">{postError}</p>}
+        </section>}
+
+        <section className="catalog-content home-content">
+          <div className="home-feed-heading">
+            <div>
+              <h1>{activeView.heading}</h1>
+              <p className="muted">{activeView.description}</p>
+            </div>
+            {cards.length > 0 && !showSharedPreview && <span className="home-item-count">{cards.length} {cards.length === 1 ? "release" : "releases"}</span>}
           </div>
+
+          {!listeningEnabled && (view === "recent" || view === "mine") && (
+            <div className="home-connect">
+              <div>
+                <strong>Bring in your recent listening</strong>
+                <p className="muted">Connect Spotify to see what you’ve played. Your history stays private until you choose to share it.</p>
+              </div>
+              <button type="button" onClick={connectHistory} disabled={updating}>Connect Spotify history</button>
+            </div>
+          )}
+          {feedError && <p className="error home-feed-error" role="alert">{feedError}</p>}
+
+          {showSharedPreview && cards.length > 0 && <h3 className="home-preview-heading">From the collective</h3>}
+          {cards.length === 0 ? <p className="home-empty muted" role="status">{empty}</p> : (
+            <div className="catalog-grid home-feed-grid">
+              {cards.slice(0, visibleCount).map(([item, ...others]) => (
+                <button key={`${item.spotifyType}:${item.spotifyId}`} className="catalog-card-button" type="button"
+                  onClick={() => setSelected(item)} aria-label={`Open ${item.title} by ${item.artistName ?? "unknown artist"}`}>
+                  <article className="catalog-album-card home-feed-card">
+                    <div className="catalog-cover-wrap">
+                      {item.imageUrl
+                        ? <img src={item.imageUrl} alt="" className="catalog-cover" loading="lazy" />
+                        : <img src="/design-reference/icons/album.svg" alt="" className="home-cover-placeholder" />}
+                    </div>
+                    <div className="catalog-album-meta">
+                      <p className="catalog-album-title" title={item.title}>{item.title}</p>
+                      <div className="catalog-album-sub">
+                        <p>{item.artistName ?? "Unknown artist"}</p>
+                        <span>{item.releaseDate?.slice(0, 4)}</span>
+                      </div>
+                      <div className="home-card-footer">
+                        <span className="home-listener">
+                          {item.user.image && <img src={item.user.image} alt="" loading="lazy" />}
+                          <span title={[item, ...others].map(listenerName).join(", ")}>
+                            {listenerName(item)}{others.length > 0 ? ` +${others.length}` : ""}
+                          </span>
+                        </span>
+                        <span>{item.myRating === null ? dateFormat.format(new Date(item.activityAt)) : `★ ${item.myRating}`}</span>
+                      </div>
+                    </div>
+                  </article>
+                </button>
+              ))}
+            </div>
+          )}
+          {cards.length > visibleCount && (
+            <div className="catalog-load-wrap">
+              <button className="catalog-load-more" type="button" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>Load More</button>
+            </div>
+          )}
+          <p className="home-attribution muted">Music and listening history from <a href="https://open.spotify.com/" target="_blank" rel="noreferrer">Spotify</a>.</p>
         </section>
       </section>
+
       <EntryDetailSheet
-        item={selectedEntry}
-        onClose={() => setSelectedEntry(null)}
+        key={selected ? `${selected.spotifyType}:${selected.spotifyId}` : "closed"}
+        item={selected && { ...selected, sharedByName: listenerName(selected), sharedAt: selected.activityAt }}
+        activityLabel={showingShared ? "Shared" : "Played"}
+        onClose={() => setSelected(null)}
         onSaved={() => router.refresh()}
       />
     </div>

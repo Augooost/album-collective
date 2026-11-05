@@ -14,10 +14,31 @@ model User {
   emailVerified DateTime?
   image         String?
   createdAt     DateTime @default(now())
+  listeningEnabled      Boolean   @default(false)
+  shareListeningHistory Boolean   @default(false)
+  listeningSyncedAt     DateTime?
 
   accounts      Account[]
   sessions      Session[]
   entries       JournalEntry[]
+  recentAlbums  RecentAlbum[]
+}
+
+model RecentAlbum {
+  userId      String
+  spotifyId   String
+  entryKind   EntryKind
+  title       String
+  artistName  String?
+  releaseDate String?
+  imageUrl    String?
+  playedAt    DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, spotifyId])
+  @@index([playedAt])
+  @@index([spotifyId, playedAt])
 }
 
 model Account {

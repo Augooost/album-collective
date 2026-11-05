@@ -60,7 +60,8 @@ async function refreshSpotifyToken(account: Account): Promise<string> {
       Authorization: `Basic ${basicAuth}`,
       "Content-Type": "application/x-www-form-urlencoded"
     },
-    body: params
+    body: params,
+    signal: AbortSignal.timeout(8_000)
   });
 
   if (!response.ok) {
@@ -75,8 +76,8 @@ async function refreshSpotifyToken(account: Account): Promise<string> {
 
   const expiresAt = Math.floor(Date.now() / 1000) + json.expires_in;
 
-  await prisma.account.update({
-    where: { id: account.id },
+  const saved = await prisma.account.updateMany({
+    where: { id: account.id, access_token: account.access_token, refresh_token: account.refresh_token },
     data: {
       access_token: json.access_token,
       expires_at: expiresAt,
@@ -84,7 +85,11 @@ async function refreshSpotifyToken(account: Account): Promise<string> {
     }
   });
 
-  return json.access_token;
+  if (saved.count) return json.access_token;
+
+  const current = await prisma.account.findUniqueOrThrow({ where: { id: account.id } });
+  if (!current.access_token) throw new Error("Spotify account is not connected.");
+  return current.access_token;
 }
 
 export async function getSpotifyAccessToken(userId: string): Promise<string> {
@@ -120,7 +125,7 @@ type SpotifyMetadata = {
   spotifyUrl: string;
 };
 
-function inferAlbumEntryKind(albumTypeRaw: unknown, totalTracksRaw: unknown): EntryKind {
+export function inferAlbumEntryKind(albumTypeRaw: unknown, totalTracksRaw: unknown): EntryKind {
   const albumType = String(albumTypeRaw ?? "").trim().toLowerCase();
   const totalTracks = Number(totalTracksRaw ?? 0);
 
@@ -139,7 +144,7 @@ function inferAlbumEntryKind(albumTypeRaw: unknown, totalTracksRaw: unknown): En
   return "ALBUM";
 }
 
-function firstImageUrl(images: Array<{ url: string }> | undefined): string | null {
+export function firstImageUrl(images: Array<{ url: string }> | undefined): string | null {
   if (!images || images.length === 0) {
     return null;
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 type SelectedItem = {
   spotifyType: "TRACK" | "ALBUM" | "PLAYLIST";
@@ -11,7 +11,6 @@ type SelectedItem = {
   entryKind: "TRACK" | "ALBUM" | "EP" | "PLAYLIST";
   releaseDate: string | null;
   sharedByName?: string | null;
-  sharedByEmail?: string | null;
   sharedAt?: string | Date;
   spotifyUrl?: string;
 };
@@ -20,7 +19,6 @@ type Review = {
   id: string;
   userId: string;
   name: string | null;
-  email: string | null;
   image: string | null;
   rating: number | null;
   notes: string | null;
@@ -34,6 +32,7 @@ type DetailData = {
   };
   overallRating: number | null;
   reviews: Review[];
+  canReview: boolean;
   currentUserReview: {
     rating: number | null;
     notes: string | null;
@@ -42,6 +41,7 @@ type DetailData = {
 
 type Props = {
   item: SelectedItem | null;
+  activityLabel?: "Shared" | "Played";
   onClose: () => void;
   onSaved?: () => void;
 };
@@ -62,22 +62,22 @@ function toLabel(kind: SelectedItem["entryKind"]): string {
   return kind;
 }
 
-export function EntryDetailSheet({ item, onClose, onSaved }: Props) {
+export function EntryDetailSheet({ item, activityLabel = "Shared", onClose, onSaved }: Props) {
   const [data, setData] = useState<DetailData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rating, setRating] = useState(0);
+  const [rating, setRating] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
-  async function loadDetails(selected: SelectedItem) {
+  async function loadDetails(selected: SelectedItem, signal?: AbortSignal) {
     setLoading(true);
     setError(null);
 
     try {
       const response = await fetch(
         `/api/items/${selected.spotifyType}/${selected.spotifyId}`,
-        { cache: "no-store" }
+        { cache: "no-store", signal }
       );
       const json = (await response.json()) as {
         error?: string;
@@ -88,22 +88,23 @@ export function EntryDetailSheet({ item, onClose, onSaved }: Props) {
       }
 
       setData(json);
-      setRating(json.currentUserReview?.rating ?? 0);
+      setRating(json.currentUserReview?.rating?.toString() ?? "");
       setNotes(json.currentUserReview?.notes ?? "");
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Failed to load details.");
+      if (!signal?.aborted) {
+        setError(loadError instanceof Error ? loadError.message : "Failed to load details.");
+      }
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }
 
   useEffect(() => {
-    if (!item) {
-      setData(null);
-      return;
-    }
-
-    loadDetails(item);
+    setData(null);
+    if (!item) return;
+    const controller = new AbortController();
+    void loadDetails(item, controller.signal);
+    return () => controller.abort();
   }, [item?.spotifyId, item?.spotifyType]);
 
   const displayItem = data?.item ?? item;
@@ -112,7 +113,8 @@ export function EntryDetailSheet({ item, onClose, onSaved }: Props) {
     return null;
   }
 
-  async function saveReview() {
+  async function saveReview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     if (!displayItem) {
       return;
     }
@@ -128,7 +130,7 @@ export function EntryDetailSheet({ item, onClose, onSaved }: Props) {
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ rating, notes })
+          body: JSON.stringify({ rating: rating === "" ? null : Number(rating), notes })
         }
       );
 
@@ -148,8 +150,10 @@ export function EntryDetailSheet({ item, onClose, onSaved }: Props) {
 
   return (
     <div className="detail-sheet-overlay" onClick={onClose}>
-      <aside className="detail-sheet" onClick={(event) => event.stopPropagation()}>
-        <button type="button" className="detail-sheet-close" onClick={onClose}>
+        <aside className="detail-sheet" role="dialog" aria-modal="true" aria-label={displayItem.title}
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
+        <button type="button" className="detail-sheet-close" onClick={onClose} autoFocus>
           Close
         </button>
 
@@ -166,9 +170,11 @@ export function EntryDetailSheet({ item, onClose, onSaved }: Props) {
             <p className="muted">{displayItem.artistName ?? "Unknown Artist"}</p>
             <p className="muted">Type: {toLabel(displayItem.entryKind)}</p>
             <p className="muted">
-              Shared by {data?.item.sharedByName ?? data?.item.sharedByEmail ?? item.sharedByName ?? item.sharedByEmail ?? "Unknown"}
+              {activityLabel} by {item.sharedByName ?? data?.item.sharedByName ?? "a member"}
             </p>
-            <p className="muted">Shared on {formatDate(data?.item.sharedAt ?? item.sharedAt)}</p>
+            {(item.sharedAt ?? data?.item.sharedAt) && (
+              <p className="muted">{activityLabel} on {formatDate(item.sharedAt ?? data?.item.sharedAt)}</p>
+            )}
             <p className="muted">
               Release date: {displayItem.releaseDate ? formatDate(displayItem.releaseDate) : "Unknown"}
             </p>
@@ -186,17 +192,20 @@ export function EntryDetailSheet({ item, onClose, onSaved }: Props) {
             Open in Spotify
           </a>
 
-          <div className="detail-edit-block stack-sm">
-            <h4>Edit your rating & note</h4>
+          {data?.canReview && !loading && (
+          <form className="detail-edit-block stack-sm" onSubmit={saveReview}>
+            <h4>{data.currentUserReview ? "Your rating & note" : "Rate this album"}</h4>
+            <p className="muted">Ratings and notes you save here are visible to members.</p>
             <label className="stack-sm">
-              <span>Rating (0 to 5)</span>
+              <span>Rating (optional, 0 to 5)</span>
               <input
                 type="number"
                 min={0}
                 max={5}
                 step={0.25}
                 value={rating}
-                onChange={(event) => setRating(Number(event.target.value))}
+                placeholder="Unrated"
+                onChange={(event) => setRating(event.target.value)}
               />
             </label>
             <label className="stack-sm">
@@ -208,10 +217,12 @@ export function EntryDetailSheet({ item, onClose, onSaved }: Props) {
                 onChange={(event) => setNotes(event.target.value)}
               />
             </label>
-            <button type="button" className="detail-sheet-primary" onClick={saveReview} disabled={saving}>
-              {saving ? "Saving..." : "Save Review"}
+            <button type="submit" className="detail-sheet-primary"
+              disabled={saving || (!data.currentUserReview && rating === "" && !notes.trim())}>
+              {saving ? "Saving…" : data.currentUserReview ? "Save review" : "Share review"}
             </button>
-          </div>
+          </form>
+          )}
 
           <div className="stack-sm">
             <h4>User Reviews</h4>
@@ -221,10 +232,10 @@ export function EntryDetailSheet({ item, onClose, onSaved }: Props) {
                   <div className="detail-review-head">
                     <div className="detail-review-user">
                       <div className="detail-review-avatar">
-                        {review.image ? <img src={review.image} alt="" /> : <span>{(review.name ?? review.email ?? "U").charAt(0)}</span>}
+                        {review.image ? <img src={review.image} alt="" /> : <span>{(review.name ?? "U").charAt(0)}</span>}
                       </div>
                       <div>
-                        <p>{review.name ?? review.email ?? "Unknown"}</p>
+                        <p>{review.name ?? "Member"}</p>
                         <p className="muted">{formatDate(review.addedAt)}</p>
                       </div>
                     </div>

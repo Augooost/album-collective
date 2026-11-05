@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { HomeShell } from "@/components/home/HomeShell";
 import { VerifySpotifyButton } from "@/components/VerifySpotifyButton";
 import { authOptions } from "@/lib/auth";
+import { visibleListening } from "@/lib/listening";
 import { prisma } from "@/lib/prisma";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -53,18 +54,50 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     );
   }
 
-  const feedEntries = await prisma.journalEntry.findMany({
-    orderBy: { addedAt: "desc" },
-    take: 24,
-    include: {
-      user: {
-        select: {
-          name: true,
-          email: true
-        }
-      }
-    }
-  });
+  const userId = session.user.id;
+  const [settings, recent, shared, myRatings] = await Promise.all([
+    prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { listeningEnabled: true, shareListeningHistory: true, listeningSyncedAt: true }
+    }),
+    prisma.recentAlbum.findMany({
+      where: visibleListening(userId),
+      orderBy: [{ playedAt: "desc" }, { spotifyId: "asc" }],
+      take: 250,
+      include: { user: { select: { name: true, image: true } } }
+    }),
+    prisma.journalEntry.findMany({
+      orderBy: [{ addedAt: "desc" }, { id: "asc" }],
+      take: 50,
+      include: { user: { select: { name: true, image: true } } }
+    }),
+    prisma.journalEntry.findMany({
+      where: { userId, spotifyType: "ALBUM", rating: { not: null } },
+      select: { spotifyId: true, rating: true }
+    })
+  ]);
+  const ratings = new Map(myRatings.map(({ spotifyId, rating }) => [spotifyId, rating]));
 
-  return <HomeShell entries={feedEntries} userImage={session.user.image ?? null} />;
+  return (
+    <HomeShell
+      recent={recent.map((album) => ({
+        ...album,
+        spotifyType: "ALBUM" as const,
+        spotifyUrl: `https://open.spotify.com/album/${album.spotifyId}`,
+        activityAt: album.playedAt.toISOString(),
+        isMine: album.userId === userId,
+        myRating: ratings.get(album.spotifyId) ?? null
+      }))}
+      shared={shared.map((entry) => ({
+        ...entry,
+        activityAt: entry.addedAt.toISOString(),
+        isMine: entry.userId === userId,
+        myRating: entry.spotifyType === "ALBUM" ? ratings.get(entry.spotifyId) ?? null : null
+      }))}
+      listeningEnabled={settings.listeningEnabled}
+      shareListeningHistory={settings.shareListeningHistory}
+      lastSyncedAt={settings.listeningSyncedAt?.toISOString() ?? null}
+      userImage={session.user.image ?? null}
+    />
+  );
 }

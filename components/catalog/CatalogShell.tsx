@@ -239,7 +239,8 @@ export function CatalogShell({ entries, userImage }: Props) {
           </div>
         </section>
       </section>
-      <EntryDetailSheet item={selectedEntry} onClose={() => setSelectedEntry(null)} />
+      <EntryDetailSheet key={selectedEntry ? `${selectedEntry.spotifyType}:${selectedEntry.spotifyId}` : "closed"}
+        item={selectedEntry} onClose={() => setSelectedEntry(null)} />
     </div>
   );
 }
