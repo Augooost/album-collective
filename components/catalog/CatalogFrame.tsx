@@ -83,8 +83,16 @@ export function CatalogFrame({ children, userImage, search, onSearchChange, onSh
           setUrl(value);
           dropLink.current?.showModal();
         }} />
-        <div className="catalog-avatar">
-          {userImage ? <img src={userImage} alt="Your profile" /> : <span>You</span>}
+        <div className="catalog-header-actions">
+          <button className="mobile-theme-button" type="button" aria-label="Light mode" aria-pressed={isLight}
+            title="Theme" onClick={toggleTheme}>
+            <span className="catalog-theme-icon" aria-hidden="true" />
+          </button>
+          <div className="catalog-avatar" role="img" aria-label="Your profile">
+            <span aria-hidden="true">You</span>
+            {userImage && <img key={userImage} src={userImage} alt=""
+              onError={(event) => { event.currentTarget.hidden = true; }} />}
+          </div>
         </div>
       </header>
 
@@ -93,12 +101,12 @@ export function CatalogFrame({ children, userImage, search, onSearchChange, onSh
           {pages.map((page) => <SidebarNavButton key={page.href} {...page} active={pathname === page.href} />)}
         </nav>
         <div className="catalog-side-actions">
-          <button className="catalog-side-btn" type="button" aria-label="Light mode"
+          <button className="catalog-side-btn catalog-sidebar-theme" type="button" aria-label="Light mode"
             aria-pressed={isLight} onClick={toggleTheme}>
             <span className="catalog-theme-icon" aria-hidden="true" />
             <span>Theme</span>
           </button>
-          <button className="catalog-side-btn" type="button" aria-haspopup="dialog"
+          <button className="catalog-side-btn catalog-sidebar-drop" type="button" aria-haspopup="dialog"
             onClick={() => dropLink.current?.showModal()}>
             <img src="/design-reference/icons/paste.svg" alt="" className="catalog-side-icon" />
             <span>Drop Link</span>

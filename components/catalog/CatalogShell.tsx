@@ -55,6 +55,7 @@ export function CatalogShell({ entries, people, viewerId, userImage }: Props) {
   const [mood, setMood] = useState("");
   const [density, setDensity] = useState(6);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<CatalogEntry | null>(null);
 
   const years = useMemo(() => {
@@ -122,61 +123,71 @@ export function CatalogShell({ entries, people, viewerId, userImage }: Props) {
     setDensity(6);
   }
 
+  const activeFilterCount = [itemType !== "all", year !== "all", sortBy !== "recent", Boolean(mood)]
+    .filter(Boolean).length;
+
   const gridStyle = {
     gridTemplateColumns: `repeat(${density}, minmax(0, 1fr))`
   };
 
   return (
     <CatalogFrame userImage={userImage} search={search} onSearchChange={setSearch}>
-      <section className="catalog-filter-row catalog-people-toolbar">
-        <FilterPill emphasized>
-          <img src="/design-reference/icons/album.svg" alt="" aria-hidden="true" className="catalog-pill-icon" />
-          <select value={itemType} onChange={(event) => setItemType(event.target.value)}>
-            <option value="all">Albums</option>
-            <option value="album">Album</option>
-            <option value="ep">EP</option>
-            <option value="track">Track</option>
-          </select>
-        </FilterPill>
+      <section className="catalog-filter-row catalog-people-toolbar catalog-browse-toolbar" data-filters-open={filtersOpen}>
+        <button type="button" className="catalog-filter-pill mobile-filter-toggle" aria-expanded={filtersOpen}
+          aria-controls="catalog-filter-controls" onClick={() => setFiltersOpen((open) => !open)}>
+          <img src="/design-reference/icons/filter.svg" alt="" className="catalog-pill-icon" />
+          Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ""}
+        </button>
+        <div className="catalog-filter-controls" id="catalog-filter-controls">
+          <FilterPill emphasized>
+            <img src="/design-reference/icons/album.svg" alt="" aria-hidden="true" className="catalog-pill-icon" />
+            <select aria-label="Filter by release type" value={itemType} onChange={(event) => setItemType(event.target.value)}>
+              <option value="all">Albums</option>
+              <option value="album">Album</option>
+              <option value="ep">EP</option>
+              <option value="track">Track</option>
+            </select>
+          </FilterPill>
 
-        <FilterPill>
-          <img src="/design-reference/icons/date.svg" alt="" aria-hidden="true" className="catalog-pill-icon" />
-          <select value={year} onChange={(event) => setYear(event.target.value)}>
-            <option value="all">Any Year</option>
-            {years.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </FilterPill>
+          <FilterPill>
+            <img src="/design-reference/icons/date.svg" alt="" aria-hidden="true" className="catalog-pill-icon" />
+            <select aria-label="Filter by year" value={year} onChange={(event) => setYear(event.target.value)}>
+              <option value="all">Any Year</option>
+              {years.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </FilterPill>
 
-        <FilterPill>
-          <img src="/design-reference/icons/rating.svg" alt="" aria-hidden="true" className="catalog-pill-icon" />
-          <select defaultValue="any">
-            <option value="any">Any Rating</option>
-          </select>
-        </FilterPill>
+          <FilterPill>
+            <img src="/design-reference/icons/rating.svg" alt="" aria-hidden="true" className="catalog-pill-icon" />
+            <select aria-label="Filter by rating" defaultValue="any">
+              <option value="any">Any Rating</option>
+            </select>
+          </FilterPill>
 
-        <FilterPill emphasized>
-          <img src="/design-reference/icons/filter.svg" alt="" aria-hidden="true" className="catalog-pill-icon" />
-          <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
-            <option value="recent">Most Recent</option>
-            <option value="oldest">Oldest</option>
-            <option value="title">Title</option>
-          </select>
-        </FilterPill>
+          <FilterPill emphasized>
+            <img src="/design-reference/icons/filter.svg" alt="" aria-hidden="true" className="catalog-pill-icon" />
+            <select aria-label="Sort releases" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+              <option value="recent">Most Recent</option>
+              <option value="oldest">Oldest</option>
+              <option value="title">Title</option>
+            </select>
+          </FilterPill>
 
-        <FilterPill>
-          <select aria-label="Filter by mood" value={mood} onChange={(event) => {
-            setMood(event.target.value);
-            setVisibleCount(PAGE_SIZE);
-          }}>
-            <option value="">Any Mood</option>
-            {moodOptions.map((value) => <option key={value} value={value.toLowerCase()}>{value}</option>)}
-          </select>
-        </FilterPill>
+          <FilterPill>
+            <select aria-label="Filter by mood" value={mood} onChange={(event) => {
+              setMood(event.target.value);
+              setVisibleCount(PAGE_SIZE);
+            }}>
+              <option value="">Any Mood</option>
+              {moodOptions.map((value) => <option key={value} value={value.toLowerCase()}>{value}</option>)}
+            </select>
+          </FilterPill>
 
+        </div>
         <div className="catalog-grow" />
         <PeopleToggle open={peopleFilter.showPeople} onToggle={() => peopleFilter.setShowPeople((open) => !open)} />
 
@@ -185,6 +196,7 @@ export function CatalogShell({ entries, people, viewerId, userImage }: Props) {
             <img src="/design-reference/icons/grid-sm.svg" alt="" aria-hidden="true" className="catalog-grid-icon" />
             <input
               type="range"
+              aria-label="Catalog grid density"
               min={2}
               max={7}
               value={density}

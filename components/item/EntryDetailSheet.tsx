@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useId, useRef, useState } from "react";
 
 import { AlbumShader } from "@/components/item/AlbumShader";
 import { MAX_MOOD_LENGTH, MAX_MOOD_TAGS, moods, uniqueMoods } from "@/lib/moods";
@@ -55,6 +55,7 @@ function formatDate(value: string | Date) {
 
 export function EntryDetailSheet({ item, activityLabel = "Shared", onClose, onSaved }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const reviewFormId = useId();
   const [data, setData] = useState<DetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -163,6 +164,18 @@ export function EntryDetailSheet({ item, activityLabel = "Shared", onClose, onSa
     }
   }
 
+  const reviewActions = (
+    <>
+      {saveError && <p className="detail-error" role="alert">{saveError}</p>}
+      <div className="detail-save-row">
+        <span className="detail-save-feedback" role="status">{savedMessage && <span>✓ {savedMessage}</span>}</span>
+        <button type="submit" form={reviewFormId} className="detail-sheet-primary" disabled={saving || !hasChanges}>
+          {saving ? "Saving…" : "Save changes"}
+        </button>
+      </div>
+    </>
+  );
+
   return (
     <dialog ref={dialog} className="detail-sheet" aria-labelledby="detail-title"
       onCancel={(event) => { event.preventDefault(); close(); }}
@@ -210,7 +223,7 @@ export function EntryDetailSheet({ item, activityLabel = "Shared", onClose, onSa
           </div>}
 
           {data?.canReview && (
-            <form className="detail-panel detail-edit-block" onSubmit={saveReview}>
+            <form id={reviewFormId} className="detail-panel detail-edit-block" onSubmit={saveReview}>
               <div>
                 <h3>Your review</h3>
                 <p className="detail-muted">Ratings and notes are visible to members. Your mood tags are private.</p>
@@ -262,13 +275,7 @@ export function EntryDetailSheet({ item, activityLabel = "Shared", onClose, onSa
                   onChange={(event) => { setNotes(event.target.value); setSavedMessage(""); }} />
               </label>
 
-              {saveError && <p className="detail-error" role="alert">{saveError}</p>}
-              <div className="detail-save-row">
-                <span className="detail-save-feedback" role="status">{savedMessage && <span>✓ {savedMessage}</span>}</span>
-                <button type="submit" className="detail-sheet-primary" disabled={saving || !hasChanges}>
-                  {saving ? "Saving…" : "Save changes"}
-                </button>
-              </div>
+              <div className="detail-inline-actions">{reviewActions}</div>
             </form>
           )}
 
@@ -298,6 +305,7 @@ export function EntryDetailSheet({ item, activityLabel = "Shared", onClose, onSa
           </section>}
         </div>
       </div>
+      {data?.canReview && <footer className="detail-mobile-actions">{reviewActions}</footer>}
     </dialog>
   );
 }

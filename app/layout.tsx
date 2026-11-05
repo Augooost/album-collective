@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { Manrope } from "next/font/google";
 import { getServerSession } from "next-auth";
@@ -9,12 +9,15 @@ import { authOptions, getMissingSpotifyAuthEnv } from "@/lib/auth";
 import "./globals.css";
 import "./catalog-theme.css";
 import "./album-drawer.css";
+import "./mobile.css";
 
 const manrope = Manrope({
   subsets: ["latin"],
   display: "swap",
   fallback: ["sans-serif"]
 });
+
+export const viewport: Viewport = { viewportFit: "cover" };
 
 export const metadata: Metadata = {
   title: "Album Collective",

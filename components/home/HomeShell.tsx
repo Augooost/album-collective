@@ -225,7 +225,10 @@ export function HomeShell({ userId, people, recent, shared, listeningEnabled, sh
           ))}
         </div>
         <details className="home-settings">
-          <summary className="catalog-filter-pill home-filter">Listening settings</summary>
+          <summary className="catalog-filter-pill home-filter" aria-label="Listening settings">
+            <span className="home-settings-label">Listening settings</span>
+            <span className="mobile-settings-label" aria-hidden="true">Settings</span>
+          </summary>
           <div className="home-settings-panel stack-sm">
             <p><strong>Spotify listening history</strong></p>
             <p className="muted">Album Collective refreshes your recent albums when you open Home and shows up to 14 days of listening.</p>
@@ -300,7 +303,8 @@ export function HomeShell({ userId, people, recent, shared, listeningEnabled, sh
                     </div>
                     <div className="home-card-footer">
                       <span className="home-listener">
-                        {item.user.image && <img src={item.user.image} alt="" loading="lazy" />}
+                        {item.user.image && <img src={item.user.image} alt="" loading="lazy"
+                          onError={(event) => { event.currentTarget.hidden = true; }} />}
                         <span title={[item, ...others].map(listenerName).join(", ")}>
                           {listenerName(item)}{others.length > 0 ? ` +${others.length}` : ""}
                         </span>
