@@ -201,3 +201,20 @@ body:has(.detail-sheet[open]) { overflow: hidden; }
   .detail-sheet :is(button, a):active:not(:disabled) { transform: none; }
   .detail-shader { display: none; }
 }
+
+.detail-add-mood {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.detail-moods { max-height: 148px; overflow-y: auto; padding: 2px; }
+.detail-add-mood input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--detail-line);
+  background: var(--detail-control);
+  color: var(--detail-ink);
+}
+.detail-add-mood button { flex-shrink: 0; }

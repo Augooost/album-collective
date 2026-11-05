@@ -5,11 +5,12 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { visibleListening } from "@/lib/listening";
 import { prisma } from "@/lib/prisma";
-import { moods } from "@/lib/moods";
+import { MAX_MOOD_LENGTH, MAX_MOOD_TAGS, readMoodTags, uniqueMoods } from "@/lib/moods";
 
 const updateSchema = z.object({
   rating: z.number().min(0).max(5).nullable(),
-  mood: z.enum(moods).nullable().optional(),
+  mood: z.string().trim().min(1).max(MAX_MOOD_LENGTH).nullable().optional(),
+  moodTags: z.array(z.string().trim().min(1).max(MAX_MOOD_LENGTH)).max(MAX_MOOD_TAGS).optional(),
   notes: z.string().max(300).optional().default("")
 });
 
@@ -46,7 +47,7 @@ export async function GET(
     const resolvedParams = await params;
     const spotifyType = normalizeSpotifyType(resolvedParams.spotifyType);
 
-    const entries = await prisma.journalEntry.findMany({
+    const [entries, taggedEntries] = await Promise.all([prisma.journalEntry.findMany({
       where: {
         spotifyType,
         spotifyId: resolvedParams.spotifyId,
@@ -64,7 +65,10 @@ export async function GET(
           }
         }
       }
-    });
+    }), prisma.journalEntry.findMany({
+      where: { userId, OR: [{ mood: { not: null } }, { moodTags: { isEmpty: false } }] },
+      select: { mood: true, moodTags: true }
+    })]);
 
     const item = entries.find((entry) => !entry.catalogOnly) ?? entries[0];
     const recent = !item && spotifyType === "ALBUM"
@@ -128,12 +132,14 @@ export async function GET(
       },
       overallRating,
       reviews,
+      savedMoodTags: uniqueMoods(taggedEntries.flatMap(readMoodTags)),
       canReview: spotifyType === "ALBUM" || currentUserReview !== null,
       currentUserReview: currentUserReview
         ? {
             rating: currentUserReview.rating,
             notes: currentUserReview.notes,
-            mood: currentUserReview.mood
+            mood: currentUserReview.mood,
+            moodTags: readMoodTags(currentUserReview)
           }
         : null
     });
@@ -165,18 +171,23 @@ export async function PATCH(
     const where = { userId_spotifyType_spotifyId: { userId, spotifyType, spotifyId } };
     const notes = parsed.notes.trim() || null;
     const hasReview = parsed.rating !== null || notes !== null;
+    const tags = parsed.moodTags !== undefined ? uniqueMoods(parsed.moodTags)
+      : parsed.mood !== undefined ? (parsed.mood ? [parsed.mood] : []) : undefined;
     const data = {
       rating: parsed.rating,
       notes,
-      mood: parsed.mood,
+      ...(tags && { mood: tags[0] ?? null, moodTags: tags }),
       ...(hasReview ? { catalogOnly: false } : {})
     };
-    const existing = await prisma.journalEntry.updateMany({ where: where.userId_spotifyType_spotifyId, data });
-    if (existing.count) return Response.json({ review: data });
+    const reviewFields = { rating: true, notes: true, mood: true, moodTags: true } as const;
+    const [existing] = await prisma.journalEntry.updateManyAndReturn({
+      where: where.userId_spotifyType_spotifyId, data, select: reviewFields
+    });
+    if (existing) return Response.json({ review: { ...existing, moodTags: readMoodTags(existing) } });
     if (spotifyType !== "ALBUM") {
       return Response.json({ error: "You do not have a review for this item yet." }, { status: 404 });
     }
-    if (!hasReview && !parsed.mood) {
+    if (!hasReview && !tags?.length) {
       return Response.json({ error: "Add a rating, note, or mood to save this album." }, { status: 400 });
     }
     const source = await prisma.journalEntry.findFirst({ where: { spotifyType, spotifyId, catalogOnly: false } })
@@ -200,17 +211,11 @@ export async function PATCH(
         sourceUrl: spotifyUrl,
         spotifyUrl
       },
-      update: data
+      update: data,
+      select: reviewFields
     });
 
-    return Response.json({
-      review: {
-        id: updated.id,
-        rating: updated.rating,
-        notes: updated.notes,
-        mood: updated.mood
-      }
-    });
+    return Response.json({ review: { ...updated, moodTags: readMoodTags(updated) } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update review.";
 

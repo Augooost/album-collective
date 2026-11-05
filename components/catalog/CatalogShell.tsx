@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { AlbumCard } from "@/components/catalog/AlbumCard";
 import { FilterPill } from "@/components/catalog/FilterPill";
 import { CatalogFrame } from "@/components/catalog/CatalogFrame";
-import { moods } from "@/lib/moods";
+import { moods, uniqueMoods } from "@/lib/moods";
+import { PeopleRow, PeopleToggle, usePeopleFilter, type Person } from "@/components/catalog/PeopleFilters";
 import { EntryDetailSheet } from "@/components/item/EntryDetailSheet";
 
 type CatalogEntry = {
@@ -16,7 +17,11 @@ type CatalogEntry = {
   title: string;
   subtitle: string | null;
   artistName: string | null;
-  mood: string | null;
+  moodTags: string[];
+  userId: string;
+  activityLabel: "Played" | "Shared";
+  sharedByName?: string | null;
+  sharedAt?: Date;
   releaseDate: string | null;
   imageUrl: string | null;
   spotifyUrl: string;
@@ -26,6 +31,8 @@ type CatalogEntry = {
 
 type Props = {
   entries: CatalogEntry[];
+  people: Person[];
+  viewerId: string;
   userImage: string | null;
 };
 
@@ -38,13 +45,14 @@ function yearFromReleaseDate(releaseDate: string | null, addedAt: string | Date)
   return new Date(addedAt).getFullYear().toString();
 }
 
-export function CatalogShell({ entries, userImage }: Props) {
+export function CatalogShell({ entries, people, viewerId, userImage }: Props) {
   const router = useRouter();
+  const peopleFilter = usePeopleFilter([viewerId]);
   const [search, setSearch] = useState("");
   const [itemType, setItemType] = useState("all");
   const [year, setYear] = useState("all");
   const [sortBy, setSortBy] = useState("recent");
-  const [mood, setMood] = useState("all");
+  const [mood, setMood] = useState("");
   const [density, setDensity] = useState(6);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [selectedEntry, setSelectedEntry] = useState<CatalogEntry | null>(null);
@@ -55,11 +63,14 @@ export function CatalogShell({ entries, userImage }: Props) {
     ).sort((a, b) => Number(b) - Number(a));
   }, [entries]);
 
+  const moodOptions = useMemo(() => uniqueMoods([...moods, ...entries.flatMap((entry) => entry.moodTags)]), [entries]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
 
     const list = entries.filter((entry) => {
-      if (mood !== "all" && entry.mood !== mood) return false;
+      if (peopleFilter.selected.length && !peopleFilter.selected.includes(entry.userId)) return false;
+      if (mood && !entry.moodTags.some((tag) => tag.toLowerCase() === mood)) return false;
 
       if (itemType !== "all" && entry.entryKind.toLowerCase() !== itemType) {
         return false;
@@ -88,8 +99,14 @@ export function CatalogShell({ entries, userImage }: Props) {
       list.sort((a, b) => +new Date(b.addedAt) - +new Date(a.addedAt));
     }
 
-    return list;
-  }, [entries, itemType, mood, search, sortBy, year]);
+    const seen = new Set<string>();
+    return list.filter((entry) => {
+      const key = `${entry.spotifyType}:${entry.spotifyId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [entries, itemType, mood, peopleFilter.selected, search, sortBy, year]);
 
   const visibleEntries = filtered.slice(0, visibleCount);
   const hasMore = filtered.length > visibleEntries.length;
@@ -99,7 +116,9 @@ export function CatalogShell({ entries, userImage }: Props) {
     setItemType("all");
     setYear("all");
     setSortBy("recent");
-    setMood("all");
+    setMood("");
+    peopleFilter.setSelected([viewerId]);
+    setVisibleCount(PAGE_SIZE);
     setDensity(6);
   }
 
@@ -109,7 +128,7 @@ export function CatalogShell({ entries, userImage }: Props) {
 
   return (
     <CatalogFrame userImage={userImage} search={search} onSearchChange={setSearch}>
-      <section className="catalog-filter-row">
+      <section className="catalog-filter-row catalog-people-toolbar">
         <FilterPill emphasized>
           <img src="/design-reference/icons/album.svg" alt="" aria-hidden="true" className="catalog-pill-icon" />
           <select value={itemType} onChange={(event) => setItemType(event.target.value)}>
@@ -153,12 +172,13 @@ export function CatalogShell({ entries, userImage }: Props) {
             setMood(event.target.value);
             setVisibleCount(PAGE_SIZE);
           }}>
-            <option value="all">Any Mood</option>
-            {moods.map((value) => <option key={value} value={value}>{value}</option>)}
+            <option value="">Any Mood</option>
+            {moodOptions.map((value) => <option key={value} value={value.toLowerCase()}>{value}</option>)}
           </select>
         </FilterPill>
 
         <div className="catalog-grow" />
+        <PeopleToggle open={peopleFilter.showPeople} onToggle={() => peopleFilter.setShowPeople((open) => !open)} />
 
         <FilterPill>
           <div className="catalog-density">
@@ -177,6 +197,8 @@ export function CatalogShell({ entries, userImage }: Props) {
         <button className="catalog-reset" type="button" onClick={resetFilters}>
           Reset
         </button>
+        <PeopleRow people={people} viewerId={viewerId} selected={peopleFilter.selected} open={peopleFilter.showPeople}
+          onToggle={(id) => { peopleFilter.togglePerson(id); setVisibleCount(PAGE_SIZE); }} />
       </section>
 
       <section className="catalog-content">
@@ -193,7 +215,7 @@ export function CatalogShell({ entries, userImage }: Props) {
               <AlbumCard
                 title={entry.title}
                 artist={entry.artistName ?? entry.subtitle ?? "Unknown Artist"}
-                mood={entry.mood}
+                moodTags={entry.moodTags}
                 year={yearFromReleaseDate(entry.releaseDate, entry.addedAt)}
                 imageUrl={entry.imageUrl}
               />
@@ -214,7 +236,7 @@ export function CatalogShell({ entries, userImage }: Props) {
         </div>
       </section>
       <EntryDetailSheet key={selectedEntry ? `${selectedEntry.spotifyType}:${selectedEntry.spotifyId}` : "closed"}
-        item={selectedEntry} onClose={() => setSelectedEntry(null)} onSaved={() => router.refresh()} />
+        item={selectedEntry} activityLabel={selectedEntry?.activityLabel} onClose={() => setSelectedEntry(null)} onSaved={() => router.refresh()} />
     </CatalogFrame>
   );
 }

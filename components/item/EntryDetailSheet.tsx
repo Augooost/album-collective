@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { AlbumShader } from "@/components/item/AlbumShader";
-import { moods, type Mood } from "@/lib/moods";
+import { MAX_MOOD_LENGTH, MAX_MOOD_TAGS, moods, uniqueMoods } from "@/lib/moods";
 
 type SelectedItem = {
   spotifyType: "TRACK" | "ALBUM" | "PLAYLIST";
@@ -31,11 +31,12 @@ type DetailData = {
   item: SelectedItem;
   overallRating: number | null;
   reviews: Review[];
+  savedMoodTags: string[];
   canReview: boolean;
   currentUserReview: {
     rating: number | null;
     notes: string | null;
-    mood: Mood | null;
+    moodTags: string[];
   } | null;
 };
 
@@ -60,7 +61,8 @@ export function EntryDetailSheet({ item, activityLabel = "Shared", onClose, onSa
   const [saveError, setSaveError] = useState<string | null>(null);
   const [rating, setRating] = useState("");
   const [notes, setNotes] = useState("");
-  const [mood, setMood] = useState<Mood | null>(null);
+  const [moodTags, setMoodTags] = useState<string[]>([]);
+  const [customMood, setCustomMood] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
   const endpoint = item && `/api/items/${item.spotifyType}/${item.spotifyId}`;
@@ -77,7 +79,7 @@ export function EntryDetailSheet({ item, activityLabel = "Shared", onClose, onSa
       setData(json);
       setRating(json.currentUserReview?.rating?.toString() ?? "");
       setNotes(json.currentUserReview?.notes ?? "");
-      setMood(json.currentUserReview?.mood ?? null);
+      setMoodTags(json.currentUserReview?.moodTags ?? []);
     } catch (error) {
       if (!signal?.aborted) setLoadError(error instanceof Error ? error.message : "Couldn’t load album details.");
     } finally {
@@ -107,7 +109,25 @@ export function EntryDetailSheet({ item, activityLabel = "Shared", onClose, onSa
   const ratingCount = data?.reviews.filter((review) => review.rating !== null).length ?? 0;
   const hasChanges = rating !== (data?.currentUserReview?.rating?.toString() ?? "")
     || notes !== (data?.currentUserReview?.notes ?? "")
-    || mood !== (data?.currentUserReview?.mood ?? null);
+    || JSON.stringify(moodTags) !== JSON.stringify(data?.currentUserReview?.moodTags ?? []);
+  const moodOptions = uniqueMoods([...moodTags, ...moods, ...(data?.savedMoodTags ?? [])]);
+
+  function toggleMood(value: string) {
+    const alreadySelected = moodTags.some((tag) => tag.toLowerCase() === value.toLowerCase());
+    if (alreadySelected) {
+      setMoodTags((current) => current.filter((tag) => tag.toLowerCase() !== value.toLowerCase()));
+    } else if (moodTags.length < MAX_MOOD_TAGS) {
+      setMoodTags((current) => uniqueMoods([...current, value]));
+    }
+    setSavedMessage("");
+  }
+
+  function addMood() {
+    if (!customMood.trim() || moodTags.length >= MAX_MOOD_TAGS) return;
+    setMoodTags((current) => uniqueMoods([...current, customMood]));
+    setCustomMood("");
+    setSavedMessage("");
+  }
 
   function close() {
     dialog.current?.close();
@@ -125,13 +145,14 @@ export function EntryDetailSheet({ item, activityLabel = "Shared", onClose, onSa
       const response = await fetch(endpoint, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rating: rating === "" ? null : Number(rating), notes, mood })
+        body: JSON.stringify({ rating: rating === "" ? null : Number(rating), notes, moodTags })
       });
       const json = await response.json() as { error?: string; review: NonNullable<DetailData["currentUserReview"]> };
       if (!response.ok) throw new Error(json.error ?? "Couldn’t save your changes.");
 
       setData((current) => current && { ...current, currentUserReview: json.review });
       setNotes(json.review.notes ?? "");
+      setMoodTags(json.review.moodTags);
       setSavedMessage(rating !== "" || notes.trim() ? "Review saved" : "Catalog updated");
       onSaved?.();
       await loadDetails(endpoint);
@@ -192,7 +213,7 @@ export function EntryDetailSheet({ item, activityLabel = "Shared", onClose, onSa
             <form className="detail-panel detail-edit-block" onSubmit={saveReview}>
               <div>
                 <h3>Your review</h3>
-                <p className="detail-muted">Ratings and notes are visible to members. Your mood tag is private.</p>
+                <p className="detail-muted">Ratings and notes are visible to members. Your mood tags are private.</p>
               </div>
 
               <fieldset disabled={saving}>
@@ -212,14 +233,27 @@ export function EntryDetailSheet({ item, activityLabel = "Shared", onClose, onSa
               </fieldset>
 
               <fieldset disabled={saving}>
-                <legend>Catalog mood <span className="detail-muted">· optional</span></legend>
+                <legend>Catalog moods <span className="detail-muted">· optional</span></legend>
                 <div className="detail-moods">
-                  {moods.map((value) => <button key={value} type="button" className="detail-mood"
-                    data-mood={value} aria-pressed={mood === value} onClick={() => {
-                      setMood(mood === value ? null : value);
-                      setSavedMessage("");
-                    }}>{value}</button>)}
+                  {moodOptions.map((value) => {
+                    const active = moodTags.some((tag) => tag.toLowerCase() === value.toLowerCase());
+                    return <button key={value.toLowerCase()} type="button" className="detail-mood"
+                      aria-pressed={active} disabled={!active && moodTags.length >= MAX_MOOD_TAGS}
+                      onClick={() => toggleMood(value)}>{value}</button>;
+                  })}
                 </div>
+                <div className="detail-add-mood">
+                  <input type="text" aria-label="Custom mood tag" placeholder="Add your own mood"
+                    value={customMood} maxLength={MAX_MOOD_LENGTH} onChange={(event) => setCustomMood(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+                      event.preventDefault();
+                      addMood();
+                    }} />
+                  <button type="button" disabled={!customMood.trim() || moodTags.length >= MAX_MOOD_TAGS}
+                    onClick={addMood}>Add tag</button>
+                </div>
+                {moodTags.length >= MAX_MOOD_TAGS && <p className="detail-muted">Up to {MAX_MOOD_TAGS} moods per release.</p>}
               </fieldset>
 
               <label className="detail-note">

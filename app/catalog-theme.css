@@ -111,18 +111,16 @@
 }
 [data-theme="light"] .stats-bar-fill { background: linear-gradient(90deg, #6560a0, #4a8b7a); }
 
-.catalog-mood-tag {
-  display: inline-block;
-  margin-top: 7px;
-  padding: 2px 8px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 650;
-  color: var(--theme-muted, #b9d2c7);
-}
-
 @media (max-width: 420px) {
   .catalog-sidebar { padding: 5px; }
   .catalog-side-btn { padding-inline: 5px; font-size: .7rem; }
+}
+
+[data-theme="light"] :is(.people-chip, .catalog-filter-pill.people-toggle) {
+  background: var(--theme-control);
+  color: var(--theme-ink);
+}
+[data-theme="light"] :is(.people-chip, .catalog-filter-pill.people-toggle)[aria-pressed="true"] {
+  background: var(--theme-selected);
+  color: var(--theme-selected-text);
 }

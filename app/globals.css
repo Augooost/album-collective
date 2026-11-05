@@ -790,3 +790,85 @@ button[disabled] {
   .home-settings-panel { left: 0; right: auto; }
   .home-feed-card { padding: 8px; }
 }
+
+/* Member controls share the filter surface across Home and Catalog. */
+.catalog-people-toolbar { padding: 14px 15px; row-gap: 10px; }
+.catalog-filter-pill.people-toggle {
+  justify-content: center;
+  width: 34px;
+  padding: 0;
+  color: #e3e8e7;
+}
+.people-toggle[aria-pressed="true"] { background: #e6e9e8; color: #172021; }
+
+.catalog-people {
+  display: flex;
+  flex: 0 0 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 3px 2px 4px;
+  scrollbar-width: thin;
+}
+.catalog-people[hidden] { display: none; }
+
+.people-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 3px 9px 3px 4px;
+  background: #242a2b;
+  color: #e3e8e7;
+  font-size: .77rem;
+  font-weight: 650;
+}
+.people-chip[aria-pressed="true"] { background: #e6e9e8; color: #172021; }
+.people-avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #545e65;
+  color: #fff;
+  font-size: .63rem;
+}
+.people-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.people-chip:focus-visible { outline-offset: 0; }
+
+.catalog-cover-wrap { position: relative; }
+.catalog-mood-tags {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  left: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease, visibility 150ms;
+}
+.catalog-card-button:is(:hover, :focus-visible) .catalog-mood-tags { visibility: visible; opacity: 1; }
+.catalog-mood-tags > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #18181dec;
+  color: #fff;
+  font-size: .69rem;
+  font-weight: 650;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catalog-mood-tags { transition: none; }
+}

@@ -4,6 +4,8 @@ import { HomeShell } from "@/components/home/HomeShell";
 import { VerifySpotifyButton } from "@/components/VerifySpotifyButton";
 import { authOptions } from "@/lib/auth";
 import { visibleListening } from "@/lib/listening";
+import { readMoodTags } from "@/lib/moods";
+import { connectedPeople } from "@/lib/people";
 import { prisma } from "@/lib/prisma";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -55,7 +57,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   }
 
   const userId = session.user.id;
-  const [settings, recent, shared, myRatings] = await Promise.all([
+  const [settings, recent, shared, myEntries, people] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: { listeningEnabled: true, shareListeningHistory: true, sharingChoiceMade: true, listeningSyncedAt: true }
@@ -68,35 +70,45 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     }),
     prisma.journalEntry.findMany({
       where: { catalogOnly: false },
-      omit: { mood: true, catalogOnly: true },
+      omit: { mood: true, moodTags: true, catalogOnly: true },
       orderBy: [{ addedAt: "desc" }, { id: "asc" }],
       take: 50,
       include: { user: { select: { name: true, image: true } } }
     }),
     prisma.journalEntry.findMany({
-      where: { userId, spotifyType: "ALBUM", rating: { not: null } },
-      select: { spotifyId: true, rating: true }
-    })
+      where: { userId },
+      select: { spotifyType: true, spotifyId: true, rating: true, mood: true, moodTags: true }
+    }),
+    connectedPeople(userId)
   ]);
-  const ratings = new Map(myRatings.map(({ spotifyId, rating }) => [spotifyId, rating]));
+  const mySelections = new Map(myEntries.map((entry) => [`${entry.spotifyType}:${entry.spotifyId}`, entry]));
 
   return (
     <HomeShell
       userId={userId}
-      recent={recent.map((album) => ({
-        ...album,
-        spotifyType: "ALBUM" as const,
-        spotifyUrl: `https://open.spotify.com/album/${album.spotifyId}`,
-        activityAt: album.playedAt.toISOString(),
-        isMine: album.userId === userId,
-        myRating: ratings.get(album.spotifyId) ?? null
-      }))}
-      shared={shared.map((entry) => ({
-        ...entry,
-        activityAt: entry.addedAt.toISOString(),
-        isMine: entry.userId === userId,
-        myRating: entry.spotifyType === "ALBUM" ? ratings.get(entry.spotifyId) ?? null : null
-      }))}
+      people={people}
+      recent={recent.map((album) => {
+        const own = mySelections.get(`ALBUM:${album.spotifyId}`);
+        return {
+          ...album,
+          spotifyType: "ALBUM" as const,
+          spotifyUrl: `https://open.spotify.com/album/${album.spotifyId}`,
+          activityAt: album.playedAt.toISOString(),
+          isMine: album.userId === userId,
+          myRating: own?.rating ?? null,
+          moodTags: own ? readMoodTags(own) : []
+        };
+      })}
+      shared={shared.map((entry) => {
+        const own = mySelections.get(`${entry.spotifyType}:${entry.spotifyId}`);
+        return {
+          ...entry,
+          activityAt: entry.addedAt.toISOString(),
+          isMine: entry.userId === userId,
+          myRating: own?.rating ?? null,
+          moodTags: own ? readMoodTags(own) : []
+        };
+      })}
       listeningEnabled={settings.listeningEnabled}
       shareListeningHistory={settings.shareListeningHistory}
       showSharingPrompt={!settings.sharingChoiceMade}

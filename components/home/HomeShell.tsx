@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 
+import { MoodTags } from "@/components/catalog/MoodTags";
+import { PeopleRow, PeopleToggle, usePeopleFilter, type Person } from "@/components/catalog/PeopleFilters";
 import { CatalogFrame } from "@/components/catalog/CatalogFrame";
 import { EntryDetailSheet } from "@/components/item/EntryDetailSheet";
 import { spotifyListeningScopes } from "@/lib/spotify-scopes";
@@ -20,11 +22,14 @@ type FeedItem = {
   activityAt: string;
   isMine: boolean;
   myRating: number | null;
+  moodTags: string[];
+  userId: string;
   user: { name: string | null; image: string | null };
 };
 
 type Props = {
   userId: string;
+  people: Person[];
   recent: FeedItem[];
   shared: FeedItem[];
   listeningEnabled: boolean;
@@ -59,8 +64,9 @@ async function request(path: string, options: RequestInit) {
   return response.json();
 }
 
-export function HomeShell({ userId, recent, shared, listeningEnabled, shareListeningHistory, showSharingPrompt, lastSyncedAt, userImage }: Props) {
+export function HomeShell({ userId, people, recent, shared, listeningEnabled, shareListeningHistory, showSharingPrompt, lastSyncedAt, userImage }: Props) {
   const router = useRouter();
+  const peopleFilter = usePeopleFilter();
   const [view, setView] = useState<View>("recent");
   const [search, setSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -165,6 +171,7 @@ export function HomeShell({ userId, recent, shared, listeningEnabled, shareListe
   const feed = showSharedPreview ? shared.filter((item) => item.spotifyType === "ALBUM") : showingShared ? shared : recent;
   const groups = new Map<string, FeedItem[]>();
   for (const item of feed) {
+    if (peopleFilter.selected.length && !peopleFilter.selected.includes(item.userId)) continue;
     if ((view === "mine" && !item.isMine) || (view === "friends" && item.isMine)) continue;
     const key = `${item.spotifyType}:${item.spotifyId}`;
     const group = groups.get(key) ?? [];
@@ -174,7 +181,9 @@ export function HomeShell({ userId, recent, shared, listeningEnabled, shareListe
   const cards = [...groups.values()].filter((group) =>
     group.some((item) => [item.title, item.artistName, listenerName(item)].join(" ").toLowerCase().includes(query))
   );
-  const empty = query ? "No albums match your search." : view === "friends"
+  const empty = query ? "No albums match your search." : peopleFilter.selected.length
+    ? "No albums for the selected people in this view."
+    : view === "friends"
     ? "Albums will appear here when friends join and share their listening."
     : view === "shared" ? "Share a Spotify link to start the collection."
     : !listeningEnabled ? "Connect your Spotify history to bring your recent albums here."
@@ -183,7 +192,7 @@ export function HomeShell({ userId, recent, shared, listeningEnabled, shareListe
   return (
     <CatalogFrame userImage={userImage} search={search}
       onSearchChange={(value) => { setSearch(value); setVisibleCount(PAGE_SIZE); }}
-      onShared={() => { setSearch(""); changeView("shared"); }}>
+      onShared={() => { setSearch(""); peopleFilter.setSelected([]); changeView("shared"); }}>
       {promptOpen && (
         <dialog ref={sharingDialog} className="catalog-dialog" aria-labelledby="sharing-prompt-title"
           aria-describedby="sharing-prompt-description" onCancel={(event) => {
@@ -206,7 +215,7 @@ export function HomeShell({ userId, recent, shared, listeningEnabled, shareListe
           </div>
         </dialog>
       )}
-      <div className="catalog-filter-row home-toolbar">
+      <div className="catalog-filter-row home-toolbar catalog-people-toolbar">
         <div className="home-filters" aria-label="Listening feed">
           {filters.map((filter) => (
             <button key={filter.id} className="catalog-filter-pill home-filter" type="button"
@@ -245,6 +254,9 @@ export function HomeShell({ userId, recent, shared, listeningEnabled, shareListe
           disabled={syncing} onClick={refreshListening} title={lastSyncedAt ? `Last updated ${dateFormat.format(new Date(lastSyncedAt))}` : undefined}>
           {syncing ? "Refreshing…" : "Refresh"}
         </button>}
+        <PeopleToggle open={peopleFilter.showPeople} onToggle={() => peopleFilter.setShowPeople((open) => !open)} />
+        <PeopleRow people={people} viewerId={userId} selected={peopleFilter.selected} open={peopleFilter.showPeople}
+          onToggle={(id) => { peopleFilter.togglePerson(id); setVisibleCount(PAGE_SIZE); }} />
       </div>
 
       <section className="catalog-content home-content">
@@ -278,6 +290,7 @@ export function HomeShell({ userId, recent, shared, listeningEnabled, shareListe
                     {item.imageUrl
                       ? <img src={item.imageUrl} alt="" className="catalog-cover" loading="lazy" />
                       : <img src="/design-reference/icons/album.svg" alt="" className="home-cover-placeholder" />}
+                    <MoodTags tags={item.moodTags} />
                   </div>
                   <div className="catalog-album-meta">
                     <p className="catalog-album-title" title={item.title}>{item.title}</p>
