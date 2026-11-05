@@ -570,11 +570,31 @@ button[disabled] {
 
 .home-settings-panel button,
 .home-connect button,
-.home-share-form button {
+.home-share-form button,
+.home-sharing-dialog button {
   background: #e6e9e8;
   color: #172021;
   font-size: 0.83rem;
   font-weight: 650;
+}
+
+.home-sharing-dialog {
+  width: min(460px, calc(100vw - 32px));
+  padding: 24px;
+  border: 1px solid #364244;
+  border-radius: 18px;
+  background: #182123;
+  color: #e3e8e7;
+  box-shadow: 0 16px 48px #0009;
+}
+
+.home-sharing-dialog::backdrop { background: #060a0bd9; }
+.home-sharing-dialog h2 { margin-bottom: 8px; }
+.home-sharing-dialog p { margin-bottom: 16px; color: #aebaba; }
+.home-sharing-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.home-sharing-dialog .home-keep-private {
+  background: #242a2b;
+  color: #e3e8e7;
 }
 
 .home-settings-panel .home-text-button {

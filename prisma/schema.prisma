@@ -16,6 +16,7 @@ model User {
   createdAt     DateTime @default(now())
   listeningEnabled      Boolean   @default(false)
   shareListeningHistory Boolean   @default(false)
+  sharingChoiceMade     Boolean   @default(false)
   listeningSyncedAt     DateTime?
 
   accounts      Account[]

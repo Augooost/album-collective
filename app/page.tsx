@@ -58,7 +58,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const [settings, recent, shared, myRatings] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { listeningEnabled: true, shareListeningHistory: true, listeningSyncedAt: true }
+      select: { listeningEnabled: true, shareListeningHistory: true, sharingChoiceMade: true, listeningSyncedAt: true }
     }),
     prisma.recentAlbum.findMany({
       where: visibleListening(userId),
@@ -80,6 +80,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   return (
     <HomeShell
+      userId={userId}
       recent={recent.map((album) => ({
         ...album,
         spotifyType: "ALBUM" as const,
@@ -96,6 +97,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       }))}
       listeningEnabled={settings.listeningEnabled}
       shareListeningHistory={settings.shareListeningHistory}
+      showSharingPrompt={!settings.sharingChoiceMade}
       lastSyncedAt={settings.listeningSyncedAt?.toISOString() ?? null}
       userImage={session.user.image ?? null}
     />

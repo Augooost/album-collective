@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 
@@ -25,10 +25,12 @@ type FeedItem = {
 };
 
 type Props = {
+  userId: string;
   recent: FeedItem[];
   shared: FeedItem[];
   listeningEnabled: boolean;
   shareListeningHistory: boolean;
+  showSharingPrompt: boolean;
   lastSyncedAt: string | null;
   userImage: string | null;
 };
@@ -41,6 +43,8 @@ const filters = [
 ] as const;
 type View = (typeof filters)[number]["id"];
 const PAGE_SIZE = 18;
+const SHARING_RETURN_PARAM = "sharing-setup";
+const SHARING_INTENT_MAX_AGE = 15 * 60_000;
 const dateFormat = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" });
 
 function listenerName(item: FeedItem) {
@@ -56,7 +60,7 @@ async function request(path: string, options: RequestInit) {
   return response.json();
 }
 
-export function HomeShell({ recent, shared, listeningEnabled, shareListeningHistory, lastSyncedAt, userImage }: Props) {
+export function HomeShell({ userId, recent, shared, listeningEnabled, shareListeningHistory, showSharingPrompt, lastSyncedAt, userImage }: Props) {
   const router = useRouter();
   const [view, setView] = useState<View>("recent");
   const [search, setSearch] = useState("");
@@ -70,6 +74,10 @@ export function HomeShell({ recent, shared, listeningEnabled, shareListeningHist
   const [syncing, setSyncing] = useState(false);
   const [feedError, setFeedError] = useState<string | null>(null);
   const [postError, setPostError] = useState<string | null>(null);
+  const [sharingPromptDone, setSharingPromptDone] = useState(false);
+  const sharingDialog = useRef<HTMLDialogElement>(null);
+  const sharingIntentKey = `album-collective:sharing-setup:${userId}`;
+  const promptOpen = showSharingPrompt && !sharingPromptDone;
 
   const refreshListening = useCallback(async () => {
     setSyncing(true);
@@ -88,34 +96,68 @@ export function HomeShell({ recent, shared, listeningEnabled, shareListeningHist
     if (listeningEnabled) void refreshListening();
   }, [listeningEnabled, refreshListening]);
 
-  async function connectHistory() {
+  async function connectHistory(shareAfterConnect = false) {
     setUpdating(true);
     setFeedError(null);
+    let callbackUrl = "/";
+    if (shareAfterConnect) {
+      try {
+        sessionStorage.setItem(sharingIntentKey, String(Date.now()));
+        callbackUrl = `/?${SHARING_RETURN_PARAM}=1`;
+      } catch {
+        // The prompt can ask for a sharing choice again after Spotify connects.
+      }
+    }
     try {
-      await signIn("spotify", { callbackUrl: "/" }, { scope: spotifyListeningScopes });
+      await signIn("spotify", { callbackUrl }, { scope: spotifyListeningScopes });
     } catch {
       setFeedError("Couldn’t connect to Spotify. Please try again.");
       setUpdating(false);
     }
   }
 
-  async function updateHistory(action: "share" | "disconnect") {
+  const updateHistory = useCallback(async (action: "share" | "private" | "disconnect", onboarding = false) => {
     setUpdating(true);
     setFeedError(null);
     try {
       await request("/api/listening", action === "disconnect" ? { method: "DELETE" } : {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ share: !shareListeningHistory })
+        body: JSON.stringify({ share: action === "share", onboarding })
       });
+      if (onboarding) setSharingPromptDone(true);
       setSelected(null);
       router.refresh();
     } catch (error) {
       setFeedError(error instanceof Error ? error.message : "Couldn’t update your listening settings.");
+      if (onboarding) router.refresh();
     } finally {
       setUpdating(false);
     }
-  }
+  }, [router]);
+
+  useEffect(() => {
+    if (promptOpen && !sharingDialog.current?.open) sharingDialog.current?.showModal();
+  }, [promptOpen]);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get(SHARING_RETURN_PARAM) !== "1") return;
+    url.searchParams.delete(SHARING_RETURN_PARAM);
+    window.history.replaceState(window.history.state, "", url);
+
+    let requestedAt = 0;
+    try {
+      requestedAt = Number(sessionStorage.getItem(sharingIntentKey));
+      sessionStorage.removeItem(sharingIntentKey);
+    } catch {
+      return;
+    }
+    // A callback link alone can't opt anyone in.
+    if (promptOpen && listeningEnabled && requestedAt > Date.now() - SHARING_INTENT_MAX_AGE) {
+      void updateHistory("share", true);
+    }
+  }, [listeningEnabled, promptOpen, sharingIntentKey, updateHistory]);
 
   async function submitShare(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -169,6 +211,28 @@ export function HomeShell({ recent, shared, listeningEnabled, shareListeningHist
 
   return (
     <div className="catalog-page home-page">
+      {promptOpen && (
+        <dialog ref={sharingDialog} className="home-sharing-dialog" aria-labelledby="sharing-prompt-title"
+          aria-describedby="sharing-prompt-description" onCancel={(event) => {
+            event.preventDefault();
+            if (!updating) void updateHistory("private", true);
+          }}>
+          <h2 id="sharing-prompt-title">Share your recent listening?</h2>
+          <p id="sharing-prompt-description">
+            Let signed-in Album Collective members see your recent Spotify albums and when you played them.
+            You can change this anytime in Listening settings.
+          </p>
+          {feedError && <p className="error" role="alert">{feedError}</p>}
+          <div className="home-sharing-actions">
+            <button type="button" className="home-keep-private" disabled={updating} autoFocus
+              onClick={() => updateHistory("private", true)}>Keep private</button>
+            <button type="button" disabled={updating}
+              onClick={() => listeningEnabled ? updateHistory("share", true) : connectHistory(true)}>
+              {listeningEnabled ? "Share my recent albums" : "Connect Spotify and share"}
+            </button>
+          </div>
+        </dialog>
+      )}
       <header className="catalog-top-row home-top">
         <div className="catalog-brand">
           <img src="/design-reference/logo/logo.svg" alt="Album Collective" />
@@ -218,7 +282,7 @@ export function HomeShell({ recent, shared, listeningEnabled, shareListeningHist
               <p className="muted">Album Collective refreshes your recent albums when you open Home and shows up to 14 days of listening.</p>
               {listeningEnabled ? (
                 <>
-                  <button type="button" onClick={() => updateHistory("share")} disabled={updating}>
+                  <button type="button" onClick={() => updateHistory(shareListeningHistory ? "private" : "share")} disabled={updating}>
                     {shareListeningHistory ? "Stop sharing my listening" : "Share my recent albums"}
                   </button>
                   <p className="muted">{shareListeningHistory
@@ -227,14 +291,14 @@ export function HomeShell({ recent, shared, listeningEnabled, shareListeningHist
                   <button type="button" className="home-text-button" onClick={() => updateHistory("disconnect")} disabled={updating}>
                     Stop importing and clear history
                   </button>
-                  <button type="button" className="home-text-button" onClick={connectHistory} disabled={updating}>
+                  <button type="button" className="home-text-button" onClick={() => connectHistory()} disabled={updating}>
                     Reconnect Spotify
                   </button>
                   <a className="muted" href="https://www.spotify.com/account/apps/" target="_blank" rel="noreferrer">
                     Manage Spotify app access
                   </a>
                 </>
-              ) : <button type="button" onClick={connectHistory} disabled={updating}>Connect Spotify history</button>}
+              ) : <button type="button" onClick={() => connectHistory()} disabled={updating}>Connect Spotify history</button>}
             </div>
           </details>
           {listeningEnabled && <button className="catalog-filter-pill home-filter" type="button"
@@ -270,7 +334,7 @@ export function HomeShell({ recent, shared, listeningEnabled, shareListeningHist
                 <strong>Bring in your recent listening</strong>
                 <p className="muted">Connect Spotify to see what you’ve played. Your history stays private until you choose to share it.</p>
               </div>
-              <button type="button" onClick={connectHistory} disabled={updating}>Connect Spotify history</button>
+              <button type="button" onClick={() => connectHistory()} disabled={updating}>Connect Spotify history</button>
             </div>
           )}
           {feedError && <p className="error home-feed-error" role="alert">{feedError}</p>}
