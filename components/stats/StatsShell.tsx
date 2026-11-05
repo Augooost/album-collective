@@ -3,8 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { FilterPill } from "@/components/catalog/FilterPill";
-import { SidebarNavButton } from "@/components/catalog/SidebarNavButton";
-import { TopSearchBar } from "@/components/catalog/TopSearchBar";
+import { CatalogFrame } from "@/components/catalog/CatalogFrame";
 
 type StatsEntry = {
   entryKind: "TRACK" | "ALBUM" | "EP" | "PLAYLIST";
@@ -72,122 +71,77 @@ export function StatsShell({ entries, userImage }: Props) {
   const maxMonthValue = Math.max(1, ...insights.monthBars.map(([, count]) => count));
 
   return (
-    <div className="catalog-page">
-      <aside className="catalog-sidebar">
-        <div className="catalog-brand">
-          <img src="/design-reference/logo/logo.svg" alt="Album Collective" />
-        </div>
-        <div className="catalog-side-main">
-          <SidebarNavButton href="/" label="Home" iconSrc="/design-reference/icons/home.svg" />
-          <SidebarNavButton
-            href="/catalog"
-            label="Catalog"
-            iconSrc="/design-reference/icons/catalog.svg"
-          />
-          <SidebarNavButton
-            href="/stats"
-            label="Stats"
-            iconSrc="/design-reference/icons/stats.svg"
-            active
-          />
-        </div>
-        <div className="catalog-side-bottom">
-          <button className="catalog-side-btn" type="button">
-            <span className="catalog-side-icon catalog-theme-dot" aria-hidden="true" />
-            <span>Theme</span>
-          </button>
-          <button className="catalog-side-btn" type="button">
-            <img
-              src="/design-reference/icons/paste.svg"
-              alt=""
-              aria-hidden="true"
-              className="catalog-side-icon"
-            />
-            <span>Drop Link</span>
-          </button>
-        </div>
-      </aside>
-
-      <section className="catalog-main">
-        <header className="catalog-top-row">
-          <div className="catalog-top-left-dot" />
-          <TopSearchBar value={search} onChange={setSearch} />
-          <div className="catalog-avatar">
-            {userImage ? <img src={userImage} alt="Profile" /> : <span>U</span>}
-          </div>
-        </header>
-
-        <section className="catalog-filter-row">
-          <FilterPill>
-            <span className="home-chip-label">Insights</span>
-          </FilterPill>
-          <FilterPill>
-            <span className="home-chip-label">Last 6 Months</span>
-          </FilterPill>
-          <FilterPill>
-            <span className="home-chip-label">{entries.length} Total Saves</span>
-          </FilterPill>
-        </section>
-
-        <section className="catalog-content stack">
-          <h2>Stats Dashboard</h2>
-
-          <div className="stats-summary-grid">
-            <article className="catalog-album-card stats-card">
-              <p className="kicker">Tracks</p>
-              <h3>{insights.totals.TRACK}</h3>
-            </article>
-            <article className="catalog-album-card stats-card">
-              <p className="kicker">EPs</p>
-              <h3>{insights.totals.EP}</h3>
-            </article>
-            <article className="catalog-album-card stats-card">
-              <p className="kicker">Albums</p>
-              <h3>{insights.totals.ALBUM}</h3>
-            </article>
-            <article className="catalog-album-card stats-card">
-              <p className="kicker">Playlists</p>
-              <h3>{insights.totals.PLAYLIST}</h3>
-            </article>
-          </div>
-
-          <div className="stats-detail-grid">
-            <article className="catalog-album-card stats-panel">
-              <h3>Monthly Activity</h3>
-              <div className="stats-bars">
-                {insights.monthBars.map(([month, count]) => (
-                  <div key={month} className="stats-bar-row">
-                    <span>{month}</span>
-                    <div className="stats-bar-track">
-                      <div
-                        className="stats-bar-fill"
-                        style={{ width: `${Math.max(8, (count / maxMonthValue) * 100)}%` }}
-                      />
-                    </div>
-                    <strong>{count}</strong>
-                  </div>
-                ))}
-              </div>
-            </article>
-
-            <article className="catalog-album-card stats-panel">
-              <h3>Top Artists / Owners</h3>
-              {filteredTopArtists.length === 0 ? (
-                <p className="muted">No matching artists.</p>
-              ) : (
-                <ul className="stats-list">
-                  {filteredTopArtists.map(([name, count]) => (
-                    <li key={name}>
-                      <span>{name}</span>
-                      <strong>{count}</strong>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </article>
-          </div>
-        </section>
+    <CatalogFrame userImage={userImage} search={search} onSearchChange={setSearch}>
+      <section className="catalog-filter-row">
+        <FilterPill>
+          <span className="home-chip-label">Insights</span>
+        </FilterPill>
+        <FilterPill>
+          <span className="home-chip-label">Last 6 Months</span>
+        </FilterPill>
+        <FilterPill>
+          <span className="home-chip-label">{entries.length} Total Saves</span>
+        </FilterPill>
       </section>
-    </div>
+
+      <section className="catalog-content stack">
+        <h2>Stats Dashboard</h2>
+
+        <div className="stats-summary-grid">
+          <article className="catalog-album-card stats-card">
+            <p className="kicker">Tracks</p>
+            <h3>{insights.totals.TRACK}</h3>
+          </article>
+          <article className="catalog-album-card stats-card">
+            <p className="kicker">EPs</p>
+            <h3>{insights.totals.EP}</h3>
+          </article>
+          <article className="catalog-album-card stats-card">
+            <p className="kicker">Albums</p>
+            <h3>{insights.totals.ALBUM}</h3>
+          </article>
+          <article className="catalog-album-card stats-card">
+            <p className="kicker">Playlists</p>
+            <h3>{insights.totals.PLAYLIST}</h3>
+          </article>
+        </div>
+
+        <div className="stats-detail-grid">
+          <article className="catalog-album-card stats-panel">
+            <h3>Monthly Activity</h3>
+            <div className="stats-bars">
+              {insights.monthBars.map(([month, count]) => (
+                <div key={month} className="stats-bar-row">
+                  <span>{month}</span>
+                  <div className="stats-bar-track">
+                    <div
+                      className="stats-bar-fill"
+                      style={{ width: `${Math.max(8, (count / maxMonthValue) * 100)}%` }}
+                    />
+                  </div>
+                  <strong>{count}</strong>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="catalog-album-card stats-panel">
+            <h3>Top Artists / Owners</h3>
+            {filteredTopArtists.length === 0 ? (
+              <p className="muted">No matching artists.</p>
+            ) : (
+              <ul className="stats-list">
+                {filteredTopArtists.map(([name, count]) => (
+                  <li key={name}>
+                    <span>{name}</span>
+                    <strong>{count}</strong>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
+        </div>
+      </section>
+    </CatalogFrame>
   );
 }

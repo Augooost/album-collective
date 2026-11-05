@@ -1,11 +1,10 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 
-import { SidebarNavButton } from "@/components/catalog/SidebarNavButton";
-import { TopSearchBar } from "@/components/catalog/TopSearchBar";
+import { CatalogFrame } from "@/components/catalog/CatalogFrame";
 import { EntryDetailSheet } from "@/components/item/EntryDetailSheet";
 import { spotifyListeningScopes } from "@/lib/spotify-scopes";
 
@@ -66,14 +65,9 @@ export function HomeShell({ userId, recent, shared, listeningEnabled, shareListe
   const [search, setSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [selected, setSelected] = useState<FeedItem | null>(null);
-  const [showDropLink, setShowDropLink] = useState(false);
-  const [shareUrl, setShareUrl] = useState("");
-  const [shareNote, setShareNote] = useState("");
-  const [posting, setPosting] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [feedError, setFeedError] = useState<string | null>(null);
-  const [postError, setPostError] = useState<string | null>(null);
   const [sharingPromptDone, setSharingPromptDone] = useState(false);
   const sharingDialog = useRef<HTMLDialogElement>(null);
   const sharingIntentKey = `album-collective:sharing-setup:${userId}`;
@@ -159,29 +153,6 @@ export function HomeShell({ userId, recent, shared, listeningEnabled, shareListe
     }
   }, [listeningEnabled, promptOpen, sharingIntentKey, updateHistory]);
 
-  async function submitShare(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setPosting(true);
-    setPostError(null);
-    try {
-      await request("/api/entries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: shareUrl, notes: shareNote })
-      });
-      setShareUrl("");
-      setShareNote("");
-      setShowDropLink(false);
-      setSearch("");
-      changeView("shared");
-      router.refresh();
-    } catch (error) {
-      setPostError(error instanceof Error ? error.message : "Couldn’t share this link.");
-    } finally {
-      setPosting(false);
-    }
-  }
-
   function changeView(next: View) {
     setView(next);
     setVisibleCount(PAGE_SIZE);
@@ -210,9 +181,11 @@ export function HomeShell({ userId, recent, shared, listeningEnabled, shareListe
     : syncing ? "Finding your recent albums…" : "No recent albums yet. Play something on Spotify and check back.";
 
   return (
-    <div className="catalog-page home-page">
+    <CatalogFrame userImage={userImage} search={search}
+      onSearchChange={(value) => { setSearch(value); setVisibleCount(PAGE_SIZE); }}
+      onShared={() => { setSearch(""); changeView("shared"); }}>
       {promptOpen && (
-        <dialog ref={sharingDialog} className="home-sharing-dialog" aria-labelledby="sharing-prompt-title"
+        <dialog ref={sharingDialog} className="catalog-dialog" aria-labelledby="sharing-prompt-title"
           aria-describedby="sharing-prompt-description" onCancel={(event) => {
             event.preventDefault();
             if (!updating) void updateHistory("private", true);
@@ -223,8 +196,8 @@ export function HomeShell({ userId, recent, shared, listeningEnabled, shareListe
             You can change this anytime in Listening settings.
           </p>
           {feedError && <p className="error" role="alert">{feedError}</p>}
-          <div className="home-sharing-actions">
-            <button type="button" className="home-keep-private" disabled={updating} autoFocus
+          <div className="catalog-dialog-actions">
+            <button type="button" className="catalog-dialog-secondary" disabled={updating} autoFocus
               onClick={() => updateHistory("private", true)}>Keep private</button>
             <button type="button" disabled={updating}
               onClick={() => listeningEnabled ? updateHistory("share", true) : connectHistory(true)}>
@@ -233,152 +206,106 @@ export function HomeShell({ userId, recent, shared, listeningEnabled, shareListe
           </div>
         </dialog>
       )}
-      <header className="catalog-top-row home-top">
-        <div className="catalog-brand">
-          <img src="/design-reference/logo/logo.svg" alt="Album Collective" />
+      <div className="catalog-filter-row home-toolbar">
+        <div className="home-filters" aria-label="Listening feed">
+          {filters.map((filter) => (
+            <button key={filter.id} className="catalog-filter-pill home-filter" type="button"
+              aria-pressed={view === filter.id} onClick={() => changeView(filter.id)}>
+              {filter.label}
+            </button>
+          ))}
         </div>
-        <TopSearchBar value={search} onChange={(value) => { setSearch(value); setVisibleCount(PAGE_SIZE); }}
-          onPaste={(event) => {
-            const value = event.clipboardData.getData("text").trim();
-            if (!/^https:\/\/open\.spotify\.com\/(album|track|playlist)\//i.test(value)) return;
-            event.preventDefault();
-            setShareUrl(value);
-            setShowDropLink(true);
-          }} />
-        <div className="catalog-avatar">
-          {userImage ? <img src={userImage} alt="Your profile" /> : <span>You</span>}
-        </div>
-      </header>
+        <details className="home-settings">
+          <summary className="catalog-filter-pill home-filter">Listening settings</summary>
+          <div className="home-settings-panel stack-sm">
+            <p><strong>Spotify listening history</strong></p>
+            <p className="muted">Album Collective refreshes your recent albums when you open Home and shows up to 14 days of listening.</p>
+            {listeningEnabled ? (
+              <>
+                <button type="button" onClick={() => updateHistory(shareListeningHistory ? "private" : "share")} disabled={updating}>
+                  {shareListeningHistory ? "Stop sharing my listening" : "Share my recent albums"}
+                </button>
+                <p className="muted">{shareListeningHistory
+                  ? "Members can see your recent albums. You can turn this off anytime."
+                  : "Only you can see your listening. Turning on sharing makes recent albums visible to members."}</p>
+                <button type="button" className="home-text-button" onClick={() => updateHistory("disconnect")} disabled={updating}>
+                  Stop importing and clear history
+                </button>
+                <button type="button" className="home-text-button" onClick={() => connectHistory()} disabled={updating}>
+                  Reconnect Spotify
+                </button>
+                <a className="muted" href="https://www.spotify.com/account/apps/" target="_blank" rel="noreferrer">
+                  Manage Spotify app access
+                </a>
+              </>
+            ) : <button type="button" onClick={() => connectHistory()} disabled={updating}>Connect Spotify history</button>}
+          </div>
+        </details>
+        {listeningEnabled && <button className="catalog-filter-pill home-filter" type="button"
+          disabled={syncing} onClick={refreshListening} title={lastSyncedAt ? `Last updated ${dateFormat.format(new Date(lastSyncedAt))}` : undefined}>
+          {syncing ? "Refreshing…" : "Refresh"}
+        </button>}
+      </div>
 
-      <aside className="catalog-sidebar home-sidebar">
-        <nav className="catalog-side-main" aria-label="Main">
-          <SidebarNavButton href="/" label="Home" iconSrc="/design-reference/icons/home.svg" active />
-          <SidebarNavButton href="/catalog" label="Catalog" iconSrc="/design-reference/icons/catalog.svg" />
-          <SidebarNavButton href="/stats" label="Stats" iconSrc="/design-reference/icons/stats.svg" />
-        </nav>
-        <div className="catalog-side-bottom">
-          <button className="catalog-side-btn" type="button" aria-expanded={showDropLink}
-            aria-controls="home-drop-link" onClick={() => setShowDropLink((open) => !open)}>
-            <img src="/design-reference/icons/paste.svg" alt="" className="catalog-side-icon" />
-            <span>Drop Link</span>
-          </button>
+      <section className="catalog-content home-content">
+        <div className="home-feed-heading">
+          <div>
+            <h1>{activeView.heading}</h1>
+            <p className="muted">{activeView.description}</p>
+          </div>
+          {cards.length > 0 && !showSharedPreview && <span className="home-item-count">{cards.length} {cards.length === 1 ? "release" : "releases"}</span>}
         </div>
-      </aside>
 
-      <section className="catalog-main home-main">
-        <div className="catalog-filter-row home-toolbar">
-          <div className="home-filters" aria-label="Listening feed">
-            {filters.map((filter) => (
-              <button key={filter.id} className="catalog-filter-pill home-filter" type="button"
-                aria-pressed={view === filter.id} onClick={() => changeView(filter.id)}>
-                {filter.label}
+        {!listeningEnabled && (view === "recent" || view === "mine") && (
+          <div className="home-connect">
+            <div>
+              <strong>Bring in your recent listening</strong>
+              <p className="muted">Connect Spotify to see what you’ve played. Your history stays private until you choose to share it.</p>
+            </div>
+            <button type="button" onClick={() => connectHistory()} disabled={updating}>Connect Spotify history</button>
+          </div>
+        )}
+        {feedError && <p className="error home-feed-error" role="alert">{feedError}</p>}
+
+        {showSharedPreview && cards.length > 0 && <h3 className="home-preview-heading">From the collective</h3>}
+        {cards.length === 0 ? <p className="home-empty muted" role="status">{empty}</p> : (
+          <div className="catalog-grid home-feed-grid">
+            {cards.slice(0, visibleCount).map(([item, ...others]) => (
+              <button key={`${item.spotifyType}:${item.spotifyId}`} className="catalog-card-button" type="button"
+                onClick={() => setSelected(item)} aria-label={`Open ${item.title} by ${item.artistName ?? "unknown artist"}`}>
+                <article className="catalog-album-card home-feed-card">
+                  <div className="catalog-cover-wrap">
+                    {item.imageUrl
+                      ? <img src={item.imageUrl} alt="" className="catalog-cover" loading="lazy" />
+                      : <img src="/design-reference/icons/album.svg" alt="" className="home-cover-placeholder" />}
+                  </div>
+                  <div className="catalog-album-meta">
+                    <p className="catalog-album-title" title={item.title}>{item.title}</p>
+                    <div className="catalog-album-sub">
+                      <p>{item.artistName ?? "Unknown artist"}</p>
+                      <span>{item.releaseDate?.slice(0, 4)}</span>
+                    </div>
+                    <div className="home-card-footer">
+                      <span className="home-listener">
+                        {item.user.image && <img src={item.user.image} alt="" loading="lazy" />}
+                        <span title={[item, ...others].map(listenerName).join(", ")}>
+                          {listenerName(item)}{others.length > 0 ? ` +${others.length}` : ""}
+                        </span>
+                      </span>
+                      <span>{item.myRating === null ? dateFormat.format(new Date(item.activityAt)) : `★ ${item.myRating}`}</span>
+                    </div>
+                  </div>
+                </article>
               </button>
             ))}
           </div>
-          <details className="home-settings">
-            <summary className="catalog-filter-pill home-filter">Listening settings</summary>
-            <div className="home-settings-panel stack-sm">
-              <p><strong>Spotify listening history</strong></p>
-              <p className="muted">Album Collective refreshes your recent albums when you open Home and shows up to 14 days of listening.</p>
-              {listeningEnabled ? (
-                <>
-                  <button type="button" onClick={() => updateHistory(shareListeningHistory ? "private" : "share")} disabled={updating}>
-                    {shareListeningHistory ? "Stop sharing my listening" : "Share my recent albums"}
-                  </button>
-                  <p className="muted">{shareListeningHistory
-                    ? "Members can see your recent albums. You can turn this off anytime."
-                    : "Only you can see your listening. Turning on sharing makes recent albums visible to members."}</p>
-                  <button type="button" className="home-text-button" onClick={() => updateHistory("disconnect")} disabled={updating}>
-                    Stop importing and clear history
-                  </button>
-                  <button type="button" className="home-text-button" onClick={() => connectHistory()} disabled={updating}>
-                    Reconnect Spotify
-                  </button>
-                  <a className="muted" href="https://www.spotify.com/account/apps/" target="_blank" rel="noreferrer">
-                    Manage Spotify app access
-                  </a>
-                </>
-              ) : <button type="button" onClick={() => connectHistory()} disabled={updating}>Connect Spotify history</button>}
-            </div>
-          </details>
-          {listeningEnabled && <button className="catalog-filter-pill home-filter" type="button"
-            disabled={syncing} onClick={refreshListening} title={lastSyncedAt ? `Last updated ${dateFormat.format(new Date(lastSyncedAt))}` : undefined}>
-            {syncing ? "Refreshing…" : "Refresh"}
-          </button>}
-        </div>
-
-        {showDropLink && <section className="catalog-content stack-sm" id="home-drop-link">
-          <h3>Share a Spotify link</h3>
-          <form className="home-share-form" onSubmit={submitShare}>
-            <input type="url" placeholder="Paste a Spotify link" aria-label="Spotify link" autoFocus required
-              value={shareUrl} onChange={(event) => setShareUrl(event.target.value)} />
-            <input type="text" placeholder="Optional note" aria-label="Note" maxLength={300}
-              value={shareNote} onChange={(event) => setShareNote(event.target.value)} />
-            <button type="submit" disabled={posting}>{posting ? "Sharing…" : "Share link"}</button>
-          </form>
-          {postError && <p className="error" role="alert">{postError}</p>}
-        </section>}
-
-        <section className="catalog-content home-content">
-          <div className="home-feed-heading">
-            <div>
-              <h1>{activeView.heading}</h1>
-              <p className="muted">{activeView.description}</p>
-            </div>
-            {cards.length > 0 && !showSharedPreview && <span className="home-item-count">{cards.length} {cards.length === 1 ? "release" : "releases"}</span>}
+        )}
+        {cards.length > visibleCount && (
+          <div className="catalog-load-wrap">
+            <button className="catalog-load-more" type="button" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>Load More</button>
           </div>
-
-          {!listeningEnabled && (view === "recent" || view === "mine") && (
-            <div className="home-connect">
-              <div>
-                <strong>Bring in your recent listening</strong>
-                <p className="muted">Connect Spotify to see what you’ve played. Your history stays private until you choose to share it.</p>
-              </div>
-              <button type="button" onClick={() => connectHistory()} disabled={updating}>Connect Spotify history</button>
-            </div>
-          )}
-          {feedError && <p className="error home-feed-error" role="alert">{feedError}</p>}
-
-          {showSharedPreview && cards.length > 0 && <h3 className="home-preview-heading">From the collective</h3>}
-          {cards.length === 0 ? <p className="home-empty muted" role="status">{empty}</p> : (
-            <div className="catalog-grid home-feed-grid">
-              {cards.slice(0, visibleCount).map(([item, ...others]) => (
-                <button key={`${item.spotifyType}:${item.spotifyId}`} className="catalog-card-button" type="button"
-                  onClick={() => setSelected(item)} aria-label={`Open ${item.title} by ${item.artistName ?? "unknown artist"}`}>
-                  <article className="catalog-album-card home-feed-card">
-                    <div className="catalog-cover-wrap">
-                      {item.imageUrl
-                        ? <img src={item.imageUrl} alt="" className="catalog-cover" loading="lazy" />
-                        : <img src="/design-reference/icons/album.svg" alt="" className="home-cover-placeholder" />}
-                    </div>
-                    <div className="catalog-album-meta">
-                      <p className="catalog-album-title" title={item.title}>{item.title}</p>
-                      <div className="catalog-album-sub">
-                        <p>{item.artistName ?? "Unknown artist"}</p>
-                        <span>{item.releaseDate?.slice(0, 4)}</span>
-                      </div>
-                      <div className="home-card-footer">
-                        <span className="home-listener">
-                          {item.user.image && <img src={item.user.image} alt="" loading="lazy" />}
-                          <span title={[item, ...others].map(listenerName).join(", ")}>
-                            {listenerName(item)}{others.length > 0 ? ` +${others.length}` : ""}
-                          </span>
-                        </span>
-                        <span>{item.myRating === null ? dateFormat.format(new Date(item.activityAt)) : `★ ${item.myRating}`}</span>
-                      </div>
-                    </div>
-                  </article>
-                </button>
-              ))}
-            </div>
-          )}
-          {cards.length > visibleCount && (
-            <div className="catalog-load-wrap">
-              <button className="catalog-load-more" type="button" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>Load More</button>
-            </div>
-          )}
-          <p className="home-attribution muted">Music and listening history from <a href="https://open.spotify.com/" target="_blank" rel="noreferrer">Spotify</a>.</p>
-        </section>
+        )}
+        <p className="home-attribution muted">Music and listening history from <a href="https://open.spotify.com/" target="_blank" rel="noreferrer">Spotify</a>.</p>
       </section>
 
       <EntryDetailSheet
@@ -388,6 +315,6 @@ export function HomeShell({ userId, recent, shared, listeningEnabled, shareListe
         onClose={() => setSelected(null)}
         onSaved={() => router.refresh()}
       />
-    </div>
+    </CatalogFrame>
   );
 }
