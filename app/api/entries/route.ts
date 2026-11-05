@@ -70,6 +70,7 @@ export async function POST(request: Request) {
         rating: parsed.rating ?? null
       },
       update: {
+        catalogOnly: false,
         entryKind: metadata.entryKind,
         title: metadata.title,
         subtitle: metadata.subtitle,

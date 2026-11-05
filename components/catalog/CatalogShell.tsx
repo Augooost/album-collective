@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { AlbumCard } from "@/components/catalog/AlbumCard";
 import { FilterPill } from "@/components/catalog/FilterPill";
 import { CatalogFrame } from "@/components/catalog/CatalogFrame";
+import { moods } from "@/lib/moods";
 import { EntryDetailSheet } from "@/components/item/EntryDetailSheet";
 
 type CatalogEntry = {
@@ -14,6 +16,7 @@ type CatalogEntry = {
   title: string;
   subtitle: string | null;
   artistName: string | null;
+  mood: string | null;
   releaseDate: string | null;
   imageUrl: string | null;
   spotifyUrl: string;
@@ -36,11 +39,13 @@ function yearFromReleaseDate(releaseDate: string | null, addedAt: string | Date)
 }
 
 export function CatalogShell({ entries, userImage }: Props) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [itemType, setItemType] = useState("all");
   const [year, setYear] = useState("all");
   const [sortBy, setSortBy] = useState("recent");
-  const [density, setDensity] = useState(5);
+  const [mood, setMood] = useState("all");
+  const [density, setDensity] = useState(6);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [selectedEntry, setSelectedEntry] = useState<CatalogEntry | null>(null);
 
@@ -54,6 +59,8 @@ export function CatalogShell({ entries, userImage }: Props) {
     const q = search.trim().toLowerCase();
 
     const list = entries.filter((entry) => {
+      if (mood !== "all" && entry.mood !== mood) return false;
+
       if (itemType !== "all" && entry.entryKind.toLowerCase() !== itemType) {
         return false;
       }
@@ -82,7 +89,7 @@ export function CatalogShell({ entries, userImage }: Props) {
     }
 
     return list;
-  }, [entries, itemType, search, sortBy, year]);
+  }, [entries, itemType, mood, search, sortBy, year]);
 
   const visibleEntries = filtered.slice(0, visibleCount);
   const hasMore = filtered.length > visibleEntries.length;
@@ -92,7 +99,8 @@ export function CatalogShell({ entries, userImage }: Props) {
     setItemType("all");
     setYear("all");
     setSortBy("recent");
-    setDensity(5);
+    setMood("all");
+    setDensity(6);
   }
 
   const gridStyle = {
@@ -102,7 +110,7 @@ export function CatalogShell({ entries, userImage }: Props) {
   return (
     <CatalogFrame userImage={userImage} search={search} onSearchChange={setSearch}>
       <section className="catalog-filter-row">
-        <FilterPill>
+        <FilterPill emphasized>
           <img src="/design-reference/icons/album.svg" alt="" aria-hidden="true" className="catalog-pill-icon" />
           <select value={itemType} onChange={(event) => setItemType(event.target.value)}>
             <option value="all">Albums</option>
@@ -131,12 +139,22 @@ export function CatalogShell({ entries, userImage }: Props) {
           </select>
         </FilterPill>
 
-        <FilterPill>
+        <FilterPill emphasized>
           <img src="/design-reference/icons/filter.svg" alt="" aria-hidden="true" className="catalog-pill-icon" />
           <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
             <option value="recent">Most Recent</option>
             <option value="oldest">Oldest</option>
             <option value="title">Title</option>
+          </select>
+        </FilterPill>
+
+        <FilterPill>
+          <select aria-label="Filter by mood" value={mood} onChange={(event) => {
+            setMood(event.target.value);
+            setVisibleCount(PAGE_SIZE);
+          }}>
+            <option value="all">Any Mood</option>
+            {moods.map((value) => <option key={value} value={value}>{value}</option>)}
           </select>
         </FilterPill>
 
@@ -163,6 +181,7 @@ export function CatalogShell({ entries, userImage }: Props) {
 
       <section className="catalog-content">
         <h2>Albums</h2>
+        {visibleEntries.length === 0 && <p className="muted">No releases match these filters.</p>}
         <div className="catalog-grid" style={gridStyle}>
           {visibleEntries.map((entry) => (
             <button
@@ -174,6 +193,7 @@ export function CatalogShell({ entries, userImage }: Props) {
               <AlbumCard
                 title={entry.title}
                 artist={entry.artistName ?? entry.subtitle ?? "Unknown Artist"}
+                mood={entry.mood}
                 year={yearFromReleaseDate(entry.releaseDate, entry.addedAt)}
                 imageUrl={entry.imageUrl}
               />
@@ -194,7 +214,7 @@ export function CatalogShell({ entries, userImage }: Props) {
         </div>
       </section>
       <EntryDetailSheet key={selectedEntry ? `${selectedEntry.spotifyType}:${selectedEntry.spotifyId}` : "closed"}
-        item={selectedEntry} onClose={() => setSelectedEntry(null)} />
+        item={selectedEntry} onClose={() => setSelectedEntry(null)} onSaved={() => router.refresh()} />
     </CatalogFrame>
   );
 }

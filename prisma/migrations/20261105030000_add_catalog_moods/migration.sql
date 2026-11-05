@@ -1,0 +1,3 @@
+ALTER TABLE "JournalEntry"
+ADD COLUMN "mood" TEXT,
+ADD COLUMN "catalogOnly" BOOLEAN NOT NULL DEFAULT false;

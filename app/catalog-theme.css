@@ -1,0 +1,128 @@
+:root[data-theme="light"] {
+  --theme-ink: #18181d;
+  --theme-muted: #4c4b55;
+  --theme-line: #25243820;
+  --theme-panel: #efedf3;
+  --theme-card: #dcdbe1;
+  --theme-control: #d6d5dc;
+  --theme-selected: #18181c;
+  --theme-selected-text: #f9f8fc;
+}
+
+[data-theme="light"] .catalog-page {
+  --muted: var(--theme-muted);
+  color-scheme: light;
+  color: var(--theme-ink);
+  background:
+    radial-gradient(ellipse at 12% 100%, #e2efea, transparent 62%),
+    linear-gradient(175deg, #e3e2ef 0%, #e8e7f0 55%, #e9ebf1 100%);
+}
+
+[data-theme="light"] :is(.catalog-sidebar, .catalog-filter-row, .catalog-content) {
+  background: var(--theme-panel);
+  border-color: #ffffff58;
+}
+
+[data-theme="light"] :is(.catalog-album-card, .home-feed-card) {
+  background: var(--theme-card);
+  border-color: #ffffff58;
+}
+
+[data-theme="light"] .catalog-cover-wrap { background: #ceccd4; }
+[data-theme="light"] .home-feed-card .catalog-cover-wrap { background: #ceccd4; }
+
+[data-theme="light"] :is(.catalog-side-btn, .catalog-filter-pill, .catalog-reset, .catalog-load-more, .catalog-avatar) {
+  background: var(--theme-control);
+  border-color: var(--theme-line);
+  color: var(--theme-ink);
+}
+
+[data-theme="light"] :is(.catalog-side-btn.active, .home-filter[aria-pressed="true"],
+  .home-settings-panel button, .home-connect button, .catalog-dialog button) {
+  background: var(--theme-selected);
+  border-color: var(--theme-selected);
+  color: var(--theme-selected-text);
+}
+
+[data-theme="light"] :is(.catalog-brand img, .catalog-side-icon, .catalog-search-icon,
+  .catalog-pill-icon, .catalog-grid-icon, .home-cover-placeholder) {
+  filter: brightness(0);
+}
+
+[data-theme="light"] .catalog-side-btn.active .catalog-side-icon { filter: brightness(0) invert(1); }
+
+[data-theme="light"] .catalog-top-row .catalog-search-input {
+  background: #d9d8e1;
+  color: var(--theme-ink);
+  border-color: var(--theme-line);
+}
+
+[data-theme="light"] .catalog-search-input::placeholder { color: var(--theme-muted); }
+
+[data-theme="light"] .catalog-filter-pill select {
+  color: var(--theme-ink);
+  appearance: auto;
+  background-image: none;
+  padding-right: 2px;
+}
+
+[data-theme="light"] .catalog-filter-pill select option {
+  background: var(--theme-panel);
+  color: var(--theme-ink);
+}
+
+[data-theme="light"] .catalog-filter-emphasis {
+  background: var(--theme-selected);
+  border-color: var(--theme-selected);
+  color: var(--theme-selected-text);
+}
+[data-theme="light"] .catalog-filter-emphasis select { color: inherit; }
+[data-theme="light"] .catalog-filter-emphasis .catalog-pill-icon { filter: brightness(0) invert(1); }
+
+[data-theme="light"] :is(.catalog-album-title, .stats-card h3, .stats-panel h3) { color: var(--theme-ink); }
+[data-theme="light"] :is(.catalog-album-sub, .catalog-album-sub span, .home-page .muted, .home-item-count,
+  .home-card-footer, .catalog-density, .stats-bar-row) { color: var(--theme-muted); }
+[data-theme="light"] .home-card-footer { border-color: var(--theme-line); }
+
+[data-theme="light"] .home-feed-grid .catalog-card-button:is(:hover, :focus-visible) .home-feed-card {
+  background: #e6e4ec;
+  border-color: #aca7bd;
+}
+
+[data-theme="light"] :is(.home-connect, .home-settings-panel, .catalog-dialog) {
+  background: #f4f2f7;
+  color: var(--theme-ink);
+  border-color: #cfccd9;
+}
+
+[data-theme="light"] :is(.home-settings-panel .home-text-button, .catalog-dialog .catalog-dialog-secondary) {
+  background: var(--theme-control);
+  color: var(--theme-ink);
+}
+[data-theme="light"] .home-settings-panel .home-text-button { padding-inline: 8px; }
+[data-theme="light"] .catalog-dialog::backdrop { background: #19172465; }
+[data-theme="light"] .catalog-dialog p { color: var(--theme-muted); }
+[data-theme="light"] .catalog-dialog .error { color: #a32630; }
+
+[data-theme="light"] :is(.catalog-share-form input, .stats-list li, .stats-bar-track) {
+  background: #d5d3dd;
+  color: var(--theme-ink);
+  border-color: var(--theme-line);
+}
+[data-theme="light"] .stats-bar-fill { background: linear-gradient(90deg, #6560a0, #4a8b7a); }
+
+.catalog-mood-tag {
+  display: inline-block;
+  margin-top: 7px;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 650;
+  color: var(--theme-muted, #b9d2c7);
+}
+
+@media (max-width: 420px) {
+  .catalog-sidebar { padding: 5px; }
+  .catalog-side-btn { padding-inline: 5px; font-size: .7rem; }
+}

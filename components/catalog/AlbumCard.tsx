@@ -3,9 +3,10 @@ type Props = {
   artist: string;
   year: string;
   imageUrl: string | null;
+  mood?: string | null;
 };
 
-export function AlbumCard({ title, artist, year, imageUrl }: Props) {
+export function AlbumCard({ title, artist, year, imageUrl, mood }: Props) {
   return (
     <article className="catalog-album-card">
       <div className="catalog-cover-wrap">
@@ -19,6 +20,7 @@ export function AlbumCard({ title, artist, year, imageUrl }: Props) {
           <p>{artist}</p>
           <span>{year}</span>
         </div>
+        {mood && <span className="catalog-mood-tag">{mood}</span>}
       </div>
     </article>
   );

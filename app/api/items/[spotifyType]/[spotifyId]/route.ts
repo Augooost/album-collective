@@ -5,9 +5,11 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { visibleListening } from "@/lib/listening";
 import { prisma } from "@/lib/prisma";
+import { moods } from "@/lib/moods";
 
 const updateSchema = z.object({
   rating: z.number().min(0).max(5).nullable(),
+  mood: z.enum(moods).nullable().optional(),
   notes: z.string().max(300).optional().default("")
 });
 
@@ -47,7 +49,8 @@ export async function GET(
     const entries = await prisma.journalEntry.findMany({
       where: {
         spotifyType,
-        spotifyId: resolvedParams.spotifyId
+        spotifyId: resolvedParams.spotifyId,
+        OR: [{ catalogOnly: false }, { userId }]
       },
       orderBy: {
         addedAt: "desc"
@@ -63,7 +66,7 @@ export async function GET(
       }
     });
 
-    const item = entries[0];
+    const item = entries.find((entry) => !entry.catalogOnly) ?? entries[0];
     const recent = !item && spotifyType === "ALBUM"
       ? await findRecentAlbum(userId, resolvedParams.spotifyId)
       : null;
@@ -108,8 +111,8 @@ export async function GET(
         artistName: item.artistName,
         imageUrl: item.imageUrl,
         releaseDate: item.releaseDate,
-        sharedByName: item.user.name,
-        sharedAt: item.addedAt,
+        sharedByName: item.catalogOnly ? null : item.user.name,
+        sharedAt: item.catalogOnly ? null : item.addedAt,
         spotifyUrl: item.spotifyUrl
       } : {
         spotifyId: resolvedParams.spotifyId,
@@ -129,7 +132,8 @@ export async function GET(
       currentUserReview: currentUserReview
         ? {
             rating: currentUserReview.rating,
-            notes: currentUserReview.notes
+            notes: currentUserReview.notes,
+            mood: currentUserReview.mood
           }
         : null
     });
@@ -159,16 +163,23 @@ export async function PATCH(
 
     const spotifyId = resolvedParams.spotifyId;
     const where = { userId_spotifyType_spotifyId: { userId, spotifyType, spotifyId } };
-    const data = { rating: parsed.rating, notes: parsed.notes.trim() || null };
+    const notes = parsed.notes.trim() || null;
+    const hasReview = parsed.rating !== null || notes !== null;
+    const data = {
+      rating: parsed.rating,
+      notes,
+      mood: parsed.mood,
+      ...(hasReview ? { catalogOnly: false } : {})
+    };
     const existing = await prisma.journalEntry.updateMany({ where: where.userId_spotifyType_spotifyId, data });
     if (existing.count) return Response.json({ review: data });
     if (spotifyType !== "ALBUM") {
       return Response.json({ error: "You do not have a review for this item yet." }, { status: 404 });
     }
-    if (data.rating === null && !data.notes) {
-      return Response.json({ error: "Add a rating or note to share a review." }, { status: 400 });
+    if (!hasReview && !parsed.mood) {
+      return Response.json({ error: "Add a rating, note, or mood to save this album." }, { status: 400 });
     }
-    const source = await prisma.journalEntry.findFirst({ where: { spotifyType, spotifyId } })
+    const source = await prisma.journalEntry.findFirst({ where: { spotifyType, spotifyId, catalogOnly: false } })
       ?? await findRecentAlbum(userId, spotifyId);
     if (!source) return Response.json({ error: "Album not found." }, { status: 404 });
 
@@ -178,6 +189,7 @@ export async function PATCH(
       create: {
         ...where.userId_spotifyType_spotifyId,
         ...data,
+        catalogOnly: !hasReview,
         entryKind: source.entryKind,
         title: source.title,
         artistName: source.artistName,
@@ -195,7 +207,8 @@ export async function PATCH(
       review: {
         id: updated.id,
         rating: updated.rating,
-        notes: updated.notes
+        notes: updated.notes,
+        mood: updated.mood
       }
     });
   } catch (error) {

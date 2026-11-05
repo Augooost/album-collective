@@ -97,6 +97,8 @@ model JournalEntry {
   sourceUrl   String
   notes       String?
   rating      Float?
+  mood        String?
+  catalogOnly Boolean     @default(false)
   addedAt     DateTime    @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

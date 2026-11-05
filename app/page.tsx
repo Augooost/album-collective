@@ -67,6 +67,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       include: { user: { select: { name: true, image: true } } }
     }),
     prisma.journalEntry.findMany({
+      where: { catalogOnly: false },
+      omit: { mood: true, catalogOnly: true },
       orderBy: [{ addedAt: "desc" }, { id: "asc" }],
       take: 50,
       include: { user: { select: { name: true, image: true } } }

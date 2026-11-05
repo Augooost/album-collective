@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { Manrope } from "next/font/google";
 import { getServerSession } from "next-auth";
 
@@ -6,6 +7,8 @@ import { LayoutShell } from "@/components/LayoutShell";
 import { authOptions, getMissingSpotifyAuthEnv } from "@/lib/auth";
 
 import "./globals.css";
+import "./catalog-theme.css";
+import "./album-drawer.css";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -21,11 +24,12 @@ export const metadata: Metadata = {
 export default async function RootLayout({
   children
 }: Readonly<{ children: React.ReactNode }>) {
-  const session = await getServerSession(authOptions);
+  const [session, cookieStore] = await Promise.all([getServerSession(authOptions), cookies()]);
+  const theme = cookieStore.get("album-theme")?.value === "light" ? "light" : "dark";
   const missingSpotifyAuthEnv = getMissingSpotifyAuthEnv();
 
   return (
-    <html lang="en">
+    <html lang="en" data-theme={theme} suppressHydrationWarning>
       <body className={manrope.className}>
         <LayoutShell
           loggedIn={Boolean(session?.user?.id)}

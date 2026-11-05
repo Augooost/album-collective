@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, ReactNode, useRef, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { SidebarNavButton } from "@/components/catalog/SidebarNavButton";
@@ -24,10 +24,23 @@ export function CatalogFrame({ children, userImage, search, onSearchChange, onSh
   const pathname = usePathname();
   const router = useRouter();
   const dropLink = useRef<HTMLDialogElement>(null);
+  const [isLight, setIsLight] = useState(false);
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setIsLight(document.documentElement.dataset.theme === "light");
+  }, []);
+
+  function toggleTheme() {
+    const light = document.documentElement.dataset.theme !== "light";
+    const theme = light ? "light" : "dark";
+    document.documentElement.dataset.theme = theme;
+    document.cookie = `album-theme=${theme}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    setIsLight(light);
+  }
 
   async function shareLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -79,11 +92,18 @@ export function CatalogFrame({ children, userImage, search, onSearchChange, onSh
         <nav className="catalog-side-main" aria-label="Main">
           {pages.map((page) => <SidebarNavButton key={page.href} {...page} active={pathname === page.href} />)}
         </nav>
-        <button className="catalog-side-btn catalog-drop-link" type="button" aria-haspopup="dialog"
-          onClick={() => dropLink.current?.showModal()}>
-          <img src="/design-reference/icons/paste.svg" alt="" className="catalog-side-icon" />
-          <span>Drop Link</span>
-        </button>
+        <div className="catalog-side-actions">
+          <button className="catalog-side-btn" type="button" aria-label="Light mode"
+            aria-pressed={isLight} onClick={toggleTheme}>
+            <span className="catalog-theme-icon" aria-hidden="true" />
+            <span>Theme</span>
+          </button>
+          <button className="catalog-side-btn" type="button" aria-haspopup="dialog"
+            onClick={() => dropLink.current?.showModal()}>
+            <img src="/design-reference/icons/paste.svg" alt="" className="catalog-side-icon" />
+            <span>Drop Link</span>
+          </button>
+        </div>
       </aside>
 
       <section className="catalog-main">{children}</section>
