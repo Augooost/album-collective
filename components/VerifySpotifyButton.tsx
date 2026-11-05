@@ -9,12 +9,7 @@ export function VerifySpotifyButton() {
     event.preventDefault();
 
     try {
-      const result = await signIn("spotify", {
-        callbackUrl: "/",
-        redirect: false
-      });
-
-      window.location.assign(result?.url ?? fallbackHref);
+      await signIn("spotify", { callbackUrl: "/" });
     } catch {
       window.location.assign(fallbackHref);
     }

@@ -26,15 +26,15 @@ Private Spotify-based shared music journal built with Next.js, Prisma, and NextA
 npm install
 ```
 
-2. Copy env file and fill values:
+2. For a fresh setup, copy the example if `.env` does not exist and fill in the values:
 
 ```bash
-cp .env.example .env.local
+cp -n .env.example .env
 ```
 
 3. Configure Spotify app in [Spotify Developer Dashboard](https://developer.spotify.com/dashboard):
 
-- Add redirect URI: `http://localhost:3000/api/auth/callback/spotify`
+- Add redirect URI `http://127.0.0.1:3000/api/auth/callback/spotify`.
 - For production, also add your Vercel URL callback.
 
 4. Apply Prisma migrations:
@@ -55,14 +55,14 @@ npx prisma migrate dev
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://127.0.0.1:3000`.
 
 ## Spotify local setup
 
-1. In `.env.local`, set:
+1. In `.env`, set:
 
 ```bash
-NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_URL=http://127.0.0.1:3000
 NEXTAUTH_SECRET=your-long-random-secret
 SPOTIFY_CLIENT_ID=your-spotify-client-id
 SPOTIFY_CLIENT_SECRET=your-spotify-client-secret
@@ -71,17 +71,14 @@ DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/album_collective?schema=public
 
 2. In Spotify Developer Dashboard, add this Redirect URI:
 
-`http://localhost:3000/api/auth/callback/spotify`
+`http://127.0.0.1:3000/api/auth/callback/spotify`
 
 3. Restart the dev server after editing env vars.
 
 4. This project uses Auth.js/NextAuth for Spotify login, not Supabase Auth.
 Supabase dashboard auth provider settings are not required for Spotify sign-in in this codebase.
 
-5. Keep hostnames consistent:
-- If `NEXTAUTH_URL` is `http://localhost:3000`, register `http://localhost:3000/api/auth/callback/spotify` in Spotify.
-- If `NEXTAUTH_URL` is `http://127.0.0.1:3000`, register `http://127.0.0.1:3000/api/auth/callback/spotify` in Spotify.
-- Do not mix `localhost` and `127.0.0.1` across these settings.
+5. Use `127.0.0.1` in your browser, `NEXTAUTH_URL`, and the Spotify callback. Spotify requires an explicit loopback IP for local HTTP redirects. [Spotify redirect URI requirements](https://developer.spotify.com/documentation/web-api/concepts/redirect_uri)
 
 ## Local database setup (beginner-friendly)
 
@@ -95,7 +92,7 @@ You can use either:
 
 1. Install/start Postgres.
 2. Create a database named `album_collective` (example: `createdb album_collective`).
-3. Set this in `.env.local`:
+3. Set this in `.env`:
 
 ```bash
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/album_collective?schema=public
@@ -117,14 +114,14 @@ npx prisma migrate dev
 
 ### Option B: hosted Postgres (including Supabase Postgres)
 
-Use your provider's direct Postgres connection string in `.env.local`, for example:
+Set your provider's Postgres connection string in `.env`, for example:
 
 ```bash
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/album_collective?schema=public
 ```
 
 Where to get it:
-- Supabase: Project Settings -> Database -> Connection string (URI)
+- Supabase: open **Connect** in the project dashboard and copy the direct or session pooler connection string.
 - Neon: Project Dashboard -> Connection Details
 - Railway: Postgres service -> Variables/Connect tab
 
@@ -132,10 +129,10 @@ Note: this app uses NextAuth + Prisma directly. It does not require Supabase Aut
 
 ### Required env vars (local startup checklist)
 
-All must be set in `.env.local`:
+Next.js and the Prisma CLI both read `.env`. If you already have an `.env.local`, check it for overrides. Next.js loads those first, while Prisma CLI commands use the database URL from `.env`.
 
 ```bash
-NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_URL=http://127.0.0.1:3000
 NEXTAUTH_SECRET=your-long-random-secret
 SPOTIFY_CLIENT_ID=your-spotify-client-id
 SPOTIFY_CLIENT_SECRET=your-spotify-client-secret
@@ -143,6 +140,8 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/album_collective?sche
 ```
 
 If you see `?error=Callback` after Spotify sign-in, it usually means NextAuth callback reached your app, but Prisma failed to read/write session data because database connection failed.
+
+If Supabase returns `tenant/user not found`, open the original project in the dashboard and check its status. If it is paused, resume it to recover the existing journal entries. Then verify that the connection string in **Connect** matches `DATABASE_URL` locally and in Vercel. [Supabase project pausing and recovery](https://supabase.com/docs/guides/platform/free-project-pausing)
 
 ## Data model
 
