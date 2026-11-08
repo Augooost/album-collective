@@ -34,7 +34,8 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   pages: {
-    signIn: "/"
+    signIn: "/",
+    error: "/"
   },
   events: {
     async signIn({ account, user }) {

@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { FilterPill } from "@/components/catalog/FilterPill";
-import { CatalogFrame } from "@/components/catalog/CatalogFrame";
+import { useCatalogFrame } from "@/components/catalog/CatalogFrame";
 
 type StatsEntry = {
   entryKind: "TRACK" | "ALBUM" | "EP" | "PLAYLIST";
@@ -13,11 +13,10 @@ type StatsEntry = {
 
 type Props = {
   entries: StatsEntry[];
-  userImage: string | null;
 };
 
-export function StatsShell({ entries, userImage }: Props) {
-  const [search, setSearch] = useState("");
+export function StatsShell({ entries }: Props) {
+  const { search, setSearch } = useCatalogFrame();
 
   const insights = useMemo(() => {
     const totals = entries.reduce(
@@ -71,7 +70,7 @@ export function StatsShell({ entries, userImage }: Props) {
   const maxMonthValue = Math.max(1, ...insights.monthBars.map(([, count]) => count));
 
   return (
-    <CatalogFrame userImage={userImage} search={search} onSearchChange={setSearch}>
+    <>
       <section className="catalog-filter-row">
         <FilterPill>
           <span className="home-chip-label">Insights</span>
@@ -142,6 +141,6 @@ export function StatsShell({ entries, userImage }: Props) {
           </article>
         </div>
       </section>
-    </CatalogFrame>
+    </>
   );
 }

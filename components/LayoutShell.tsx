@@ -4,20 +4,22 @@ import { usePathname } from "next/navigation";
 
 import { AuthButtons } from "@/components/AuthButtons";
 import { Nav } from "@/components/Nav";
+import { CatalogFrame } from "@/components/catalog/CatalogFrame";
 
 type Props = {
   children: React.ReactNode;
   loggedIn: boolean;
+  userImage: string | null;
   missingEnv: string[];
 };
 
-export function LayoutShell({ children, loggedIn, missingEnv }: Props) {
+export function LayoutShell({ children, loggedIn, userImage, missingEnv }: Props) {
   const pathname = usePathname();
   const usesPremiumShell =
     pathname === "/" || pathname === "/catalog" || pathname === "/stats";
 
   if (usesPremiumShell) {
-    return <main>{children}</main>;
+    return <main><CatalogFrame userImage={userImage} loggedIn={loggedIn}>{children}</CatalogFrame></main>;
   }
 
   return (

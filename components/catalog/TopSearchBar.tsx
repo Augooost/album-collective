@@ -4,9 +4,10 @@ type Props = {
   value: string;
   onChange: (value: string) => void;
   onPaste?: React.ClipboardEventHandler<HTMLInputElement>;
+  disabled?: boolean;
 };
 
-export function TopSearchBar({ value, onChange, onPaste }: Props) {
+export function TopSearchBar({ value, onChange, onPaste, disabled = false }: Props) {
   return (
     <div className="catalog-search-wrap">
       <img
@@ -20,6 +21,7 @@ export function TopSearchBar({ value, onChange, onPaste }: Props) {
         aria-label="Search or paste album"
         placeholder="Search or Paste Album"
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         onPaste={onPaste}
       />

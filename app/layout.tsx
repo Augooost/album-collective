@@ -1,15 +1,16 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { Manrope } from "next/font/google";
-import { getServerSession } from "next-auth";
 
 import { LayoutShell } from "@/components/LayoutShell";
-import { authOptions, getMissingSpotifyAuthEnv } from "@/lib/auth";
+import { getMissingSpotifyAuthEnv } from "@/lib/auth";
+import { getSession } from "@/lib/session";
 
 import "./globals.css";
 import "./catalog-theme.css";
 import "./album-drawer.css";
 import "./mobile.css";
+import "./welcome.css";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -27,7 +28,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({
   children
 }: Readonly<{ children: React.ReactNode }>) {
-  const [session, cookieStore] = await Promise.all([getServerSession(authOptions), cookies()]);
+  const [session, cookieStore] = await Promise.all([getSession(), cookies()]);
   const theme = cookieStore.get("album-theme")?.value === "light" ? "light" : "dark";
   const missingSpotifyAuthEnv = getMissingSpotifyAuthEnv();
 
@@ -36,6 +37,7 @@ export default async function RootLayout({
       <body className={manrope.className}>
         <LayoutShell
           loggedIn={Boolean(session?.user?.id)}
+          userImage={session?.user?.image ?? null}
           missingEnv={missingSpotifyAuthEnv}
         >
           {children}

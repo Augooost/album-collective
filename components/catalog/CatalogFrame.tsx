@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { createContext, FormEvent, ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { SidebarNavButton } from "@/components/catalog/SidebarNavButton";
@@ -15,14 +15,30 @@ const pages = [
 type Props = {
   children: ReactNode;
   userImage: string | null;
-  search: string;
-  onSearchChange: (value: string) => void;
-  onShared?: () => void;
+  loggedIn: boolean;
 };
 
-export function CatalogFrame({ children, userImage, search, onSearchChange, onShared }: Props) {
+const CatalogContext = createContext<{
+  search: string;
+  setSearch: (value: string) => void;
+  sharedLinksVersion: number;
+} | null>(null);
+
+export function useCatalogFrame() {
+  const context = useContext(CatalogContext);
+  if (!context) throw new Error("Catalog views require the shared app layout.");
+  return context;
+}
+
+export function CatalogFrame({ children, userImage, loggedIn }: Props) {
   const pathname = usePathname();
   const router = useRouter();
+  const [searches, setSearches] = useState<Record<string, string>>({});
+  const [sharedLinksVersion, setSharedLinksVersion] = useState(0);
+  const search = searches[pathname] ?? "";
+  const setSearch = useCallback((value: string) => {
+    setSearches((current) => ({ ...current, [pathname]: value }));
+  }, [pathname]);
   const dropLink = useRef<HTMLDialogElement>(null);
   const [isLight, setIsLight] = useState(false);
   const [url, setUrl] = useState("");
@@ -61,7 +77,7 @@ export function CatalogFrame({ children, userImage, search, onSearchChange, onSh
       setUrl("");
       setNote("");
       dropLink.current?.close();
-      onShared?.();
+      setSharedLinksVersion((version) => version + 1);
       router.refresh();
     } catch (error) {
       setPostError(error instanceof Error ? error.message : "Couldn’t share this link.");
@@ -71,12 +87,12 @@ export function CatalogFrame({ children, userImage, search, onSearchChange, onSh
   }
 
   return (
-    <div className={pathname === "/" ? "catalog-page home-page" : "catalog-page"}>
+    <div className={`${pathname === "/" ? "catalog-page home-page" : "catalog-page"}${loggedIn ? "" : " welcome-page"}`}>
       <header className="catalog-top-row">
         <div className="catalog-brand">
           <img src="/design-reference/logo/logo.svg" alt="Album Collective" />
         </div>
-        <TopSearchBar value={search} onChange={onSearchChange} onPaste={(event) => {
+        <TopSearchBar value={search} onChange={setSearch} disabled={!loggedIn} onPaste={(event) => {
           const value = event.clipboardData.getData("text").trim();
           if (!/^https:\/\/open\.spotify\.com\/(album|track|playlist)\//i.test(value)) return;
           event.preventDefault();
@@ -89,7 +105,7 @@ export function CatalogFrame({ children, userImage, search, onSearchChange, onSh
             <span className="catalog-theme-icon" aria-hidden="true" />
           </button>
           <div className="catalog-avatar" role="img" aria-label="Your profile">
-            <span aria-hidden="true">You</span>
+            <span aria-hidden="true">{loggedIn ? "You" : "♪"}</span>
             {userImage && <img key={userImage} src={userImage} alt=""
               onError={(event) => { event.currentTarget.hidden = true; }} />}
           </div>
@@ -98,7 +114,8 @@ export function CatalogFrame({ children, userImage, search, onSearchChange, onSh
 
       <aside className="catalog-sidebar">
         <nav className="catalog-side-main" aria-label="Main">
-          {pages.map((page) => <SidebarNavButton key={page.href} {...page} active={pathname === page.href} />)}
+          {pages.map((page) => <SidebarNavButton key={page.href} {...page} active={pathname === page.href}
+            disabled={!loggedIn && page.href !== "/"} />)}
         </nav>
         <div className="catalog-side-actions">
           <button className="catalog-side-btn catalog-sidebar-theme" type="button" aria-label="Light mode"
@@ -107,6 +124,7 @@ export function CatalogFrame({ children, userImage, search, onSearchChange, onSh
             <span>Theme</span>
           </button>
           <button className="catalog-side-btn catalog-sidebar-drop" type="button" aria-haspopup="dialog"
+            disabled={!loggedIn} title={loggedIn ? undefined : "Sign in to share a link"}
             onClick={() => dropLink.current?.showModal()}>
             <img src="/design-reference/icons/paste.svg" alt="" className="catalog-side-icon" />
             <span>Drop Link</span>
@@ -114,7 +132,9 @@ export function CatalogFrame({ children, userImage, search, onSearchChange, onSh
         </div>
       </aside>
 
-      <section className="catalog-main">{children}</section>
+      <CatalogContext.Provider value={{ search, setSearch, sharedLinksVersion }}>
+        <section className="catalog-main">{children}</section>
+      </CatalogContext.Provider>
 
       <dialog ref={dropLink} className="catalog-dialog" aria-labelledby="drop-link-title"
         onCancel={(event) => { if (posting) event.preventDefault(); }}>

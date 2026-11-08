@@ -1,8 +1,7 @@
-import { getServerSession } from "next-auth";
-
 import { HomeShell } from "@/components/home/HomeShell";
-import { VerifySpotifyButton } from "@/components/VerifySpotifyButton";
-import { authOptions } from "@/lib/auth";
+import { WelcomeScreen } from "@/components/WelcomeScreen";
+import { getMissingSpotifyAuthEnv } from "@/lib/auth";
+import { getSession } from "@/lib/session";
 import { visibleListening } from "@/lib/listening";
 import { readMoodTags } from "@/lib/moods";
 import { connectedPeople } from "@/lib/people";
@@ -15,45 +14,15 @@ type HomePageProps = {
 };
 
 export default async function HomePage({ searchParams }: HomePageProps) {
-  const session = await getServerSession(authOptions);
+  const session = await getSession();
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const authBaseUrl = process.env.NEXTAUTH_URL ?? "";
-  const spotifyCallbackUrl = authBaseUrl
-    ? `${authBaseUrl}/api/auth/callback/spotify`
-    : null;
   const authError =
     typeof resolvedSearchParams.error === "string"
       ? resolvedSearchParams.error
       : null;
 
   if (!session?.user?.id) {
-    return (
-      <section className="stack">
-        {authError === "Callback" ? (
-          <section className="card stack-sm">
-            <h2>Spotify callback failed</h2>
-            <p>
-              Sign-in returned from Spotify, but session creation failed in the app.
-            </p>
-            <p className="muted">
-              Most common cause: Prisma cannot connect with <code>DATABASE_URL</code>.
-              Confirm your Postgres server is running and <code>DATABASE_URL</code> is
-              valid in <code>.env.local</code>.
-            </p>
-          </section>
-        ) : null}
-        <section className="card stack">
-          <h2>Welcome</h2>
-          <p>Sign in with Spotify to start your private shared music journal.</p>
-          <VerifySpotifyButton />
-          {spotifyCallbackUrl ? (
-            <p className="muted">
-              Spotify callback URL: <code>{spotifyCallbackUrl}</code>
-            </p>
-          ) : null}
-        </section>
-      </section>
-    );
+    return <WelcomeScreen authError={authError} signInAvailable={getMissingSpotifyAuthEnv().length === 0} />;
   }
 
   const userId = session.user.id;
@@ -113,7 +82,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       shareListeningHistory={settings.shareListeningHistory}
       showSharingPrompt={!settings.sharingChoiceMade}
       lastSyncedAt={settings.listeningSyncedAt?.toISOString() ?? null}
-      userImage={session.user.image ?? null}
     />
   );
 }

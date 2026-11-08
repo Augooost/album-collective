@@ -1,15 +1,14 @@
 import { redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
 
 import { CatalogShell } from "@/components/catalog/CatalogShell";
-import { authOptions } from "@/lib/auth";
+import { getSession } from "@/lib/session";
 import { visibleListening } from "@/lib/listening";
 import { readMoodTags } from "@/lib/moods";
 import { connectedPeople } from "@/lib/people";
 import { prisma } from "@/lib/prisma";
 
 export default async function CatalogPage() {
-  const session = await getServerSession(authOptions);
+  const session = await getSession();
 
   if (!session?.user?.id) {
     redirect("/");
@@ -55,5 +54,5 @@ export default async function CatalogPage() {
     }))
   ];
 
-  return <CatalogShell entries={entries} people={people} viewerId={userId} userImage={session.user.image ?? null} />;
+  return <CatalogShell entries={entries} people={people} viewerId={userId} />;
 }

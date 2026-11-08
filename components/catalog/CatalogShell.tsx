@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { AlbumCard } from "@/components/catalog/AlbumCard";
 import { FilterPill } from "@/components/catalog/FilterPill";
-import { CatalogFrame } from "@/components/catalog/CatalogFrame";
+import { useCatalogFrame } from "@/components/catalog/CatalogFrame";
 import { moods, uniqueMoods } from "@/lib/moods";
 import { PeopleRow, PeopleToggle, usePeopleFilter, type Person } from "@/components/catalog/PeopleFilters";
 import { EntryDetailSheet } from "@/components/item/EntryDetailSheet";
@@ -33,7 +33,6 @@ type Props = {
   entries: CatalogEntry[];
   people: Person[];
   viewerId: string;
-  userImage: string | null;
 };
 
 const PAGE_SIZE = 18;
@@ -45,10 +44,10 @@ function yearFromReleaseDate(releaseDate: string | null, addedAt: string | Date)
   return new Date(addedAt).getFullYear().toString();
 }
 
-export function CatalogShell({ entries, people, viewerId, userImage }: Props) {
+export function CatalogShell({ entries, people, viewerId }: Props) {
   const router = useRouter();
   const peopleFilter = usePeopleFilter([viewerId]);
-  const [search, setSearch] = useState("");
+  const { search, setSearch } = useCatalogFrame();
   const [itemType, setItemType] = useState("all");
   const [year, setYear] = useState("all");
   const [sortBy, setSortBy] = useState("recent");
@@ -131,7 +130,7 @@ export function CatalogShell({ entries, people, viewerId, userImage }: Props) {
   };
 
   return (
-    <CatalogFrame userImage={userImage} search={search} onSearchChange={setSearch}>
+    <>
       <section className="catalog-filter-row catalog-people-toolbar catalog-browse-toolbar" data-filters-open={filtersOpen}>
         <button type="button" className="catalog-filter-pill mobile-filter-toggle" aria-expanded={filtersOpen}
           aria-controls="catalog-filter-controls" onClick={() => setFiltersOpen((open) => !open)}>
@@ -249,6 +248,6 @@ export function CatalogShell({ entries, people, viewerId, userImage }: Props) {
       </section>
       <EntryDetailSheet key={selectedEntry ? `${selectedEntry.spotifyType}:${selectedEntry.spotifyId}` : "closed"}
         item={selectedEntry} activityLabel={selectedEntry?.activityLabel} onClose={() => setSelectedEntry(null)} onSaved={() => router.refresh()} />
-    </CatalogFrame>
+    </>
   );
 }

@@ -6,7 +6,7 @@ import { signIn } from "next-auth/react";
 
 import { MoodTags } from "@/components/catalog/MoodTags";
 import { PeopleRow, PeopleToggle, usePeopleFilter, type Person } from "@/components/catalog/PeopleFilters";
-import { CatalogFrame } from "@/components/catalog/CatalogFrame";
+import { useCatalogFrame } from "@/components/catalog/CatalogFrame";
 import { EntryDetailSheet } from "@/components/item/EntryDetailSheet";
 import { spotifyListeningScopes } from "@/lib/spotify-scopes";
 
@@ -36,7 +36,6 @@ type Props = {
   shareListeningHistory: boolean;
   showSharingPrompt: boolean;
   lastSyncedAt: string | null;
-  userImage: string | null;
 };
 
 const filters = [
@@ -64,11 +63,12 @@ async function request(path: string, options: RequestInit) {
   return response.json();
 }
 
-export function HomeShell({ userId, people, recent, shared, listeningEnabled, shareListeningHistory, showSharingPrompt, lastSyncedAt, userImage }: Props) {
+export function HomeShell({ userId, people, recent, shared, listeningEnabled, shareListeningHistory, showSharingPrompt, lastSyncedAt }: Props) {
   const router = useRouter();
   const peopleFilter = usePeopleFilter();
   const [view, setView] = useState<View>("recent");
-  const [search, setSearch] = useState("");
+  const { search, setSearch, sharedLinksVersion } = useCatalogFrame();
+  const lastSharedVersion = useRef(sharedLinksVersion);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [selected, setSelected] = useState<FeedItem | null>(null);
   const [updating, setUpdating] = useState(false);
@@ -159,10 +159,23 @@ export function HomeShell({ userId, people, recent, shared, listeningEnabled, sh
     }
   }, [listeningEnabled, promptOpen, sharingIntentKey, updateHistory]);
 
+  useEffect(() => {
+    if (lastSharedVersion.current === sharedLinksVersion) return;
+    lastSharedVersion.current = sharedLinksVersion;
+    setSearch("");
+    peopleFilter.setSelected([]);
+    setView("shared");
+    setVisibleCount(PAGE_SIZE);
+  }, [sharedLinksVersion, setSearch, peopleFilter.setSelected]);
+
   function changeView(next: View) {
     setView(next);
     setVisibleCount(PAGE_SIZE);
   }
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [search]);
 
   const activeView = filters.find((filter) => filter.id === view) ?? filters[0];
   const query = search.trim().toLowerCase();
@@ -190,9 +203,7 @@ export function HomeShell({ userId, people, recent, shared, listeningEnabled, sh
     : syncing ? "Finding your recent albums…" : "No recent albums yet. Play something on Spotify and check back.";
 
   return (
-    <CatalogFrame userImage={userImage} search={search}
-      onSearchChange={(value) => { setSearch(value); setVisibleCount(PAGE_SIZE); }}
-      onShared={() => { setSearch(""); peopleFilter.setSelected([]); changeView("shared"); }}>
+    <>
       {promptOpen && (
         <dialog ref={sharingDialog} className="catalog-dialog" aria-labelledby="sharing-prompt-title"
           aria-describedby="sharing-prompt-description" onCancel={(event) => {
@@ -332,6 +343,6 @@ export function HomeShell({ userId, people, recent, shared, listeningEnabled, sh
         onClose={() => setSelected(null)}
         onSaved={() => router.refresh()}
       />
-    </CatalogFrame>
+    </>
   );
 }
