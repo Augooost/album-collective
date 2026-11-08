@@ -242,7 +242,8 @@ export function HomeShell({ userId, people, recent, shared, listeningEnabled, sh
           </summary>
           <div className="home-settings-panel stack-sm">
             <p><strong>Spotify listening history</strong></p>
-            <p className="muted">Album Collective refreshes your recent albums when you open Home and shows up to 14 days of listening.</p>
+            <p className="muted">Your imported albums are kept from January 1, 2026 onward. Open Home to refresh your recent Spotify listening.</p>
+            <p className="muted">Spotify provides your latest 50 plays, so saved history builds as you return.</p>
             {listeningEnabled ? (
               <>
                 <button type="button" onClick={() => updateHistory(shareListeningHistory ? "private" : "share")} disabled={updating}>

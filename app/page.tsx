@@ -34,7 +34,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     prisma.recentAlbum.findMany({
       where: visibleListening(userId),
       orderBy: [{ playedAt: "desc" }, { spotifyId: "asc" }],
-      take: 250,
       include: { user: { select: { name: true, image: true } } }
     }),
     prisma.journalEntry.findMany({

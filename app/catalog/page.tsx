@@ -23,8 +23,7 @@ export default async function CatalogPage() {
     }),
     prisma.recentAlbum.findMany({
       where: { ...visibleListening(userId), userId: { not: userId } },
-      orderBy: { playedAt: "desc" },
-      take: 250
+      orderBy: { playedAt: "desc" }
     })
   ]);
 

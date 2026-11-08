@@ -1,10 +1,10 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { firstImageUrl, getSpotifyAccessToken, inferAlbumEntryKind } from "@/lib/spotify";
 
-export const LISTENING_WINDOW_DAYS = 14;
+export const LISTENING_HISTORY_START = "2026-01-01T00:00:00.000Z";
 const SYNC_INTERVAL_MS = 5 * 60_000;
 
 const recentPlaysSchema = z.object({
@@ -26,7 +26,7 @@ const recentPlaysSchema = z.object({
 });
 
 export function listeningCutoff() {
-  return new Date(Date.now() - LISTENING_WINDOW_DAYS * 86_400_000);
+  return new Date(LISTENING_HISTORY_START);
 }
 
 export function visibleListening(userId: string): Prisma.RecentAlbumWhereInput {
@@ -93,8 +93,28 @@ export async function syncListening(userId: string) {
     });
     if (!claimed.count) return false;
 
-    await tx.recentAlbum.deleteMany({ where: { OR: [{ userId }, { playedAt: { lt: cutoff } }] } });
-    if (albums.size) await tx.recentAlbum.createMany({ data: [...albums.values()] });
+    await tx.recentAlbum.deleteMany({ where: { userId, playedAt: { lt: cutoff } } });
+    if (albums.size) {
+      const rows = [...albums.values()].map((album) => Prisma.sql`(
+        ${album.userId}, ${album.spotifyId}, ${album.entryKind}::"EntryKind",
+        ${album.title}, ${album.artistName}, ${album.releaseDate}, ${album.imageUrl}, ${album.playedAt}
+      )`);
+
+      // Merge each snapshot into the archive, keeping the latest play for each album.
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "RecentAlbum" (
+          "userId", "spotifyId", "entryKind", "title", "artistName", "releaseDate", "imageUrl", "playedAt"
+        ) VALUES ${Prisma.join(rows)}
+        ON CONFLICT ("userId", "spotifyId") DO UPDATE SET
+          "entryKind" = EXCLUDED."entryKind",
+          "title" = EXCLUDED."title",
+          "artistName" = EXCLUDED."artistName",
+          "releaseDate" = EXCLUDED."releaseDate",
+          "imageUrl" = EXCLUDED."imageUrl",
+          "playedAt" = EXCLUDED."playedAt"
+        WHERE "RecentAlbum"."playedAt" < EXCLUDED."playedAt"
+      `);
+    }
     return true;
   });
 }
